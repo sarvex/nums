@@ -85,21 +85,19 @@ class ArrayView:
         return result
 
     def create(self, concrete_cls=None) -> BlockArrayBase:
-        if self.sel.basic_steps():
-            if self.sel.is_aligned(self._source.block_shape):
-                # Assertion below should form a conjunction with the above condition.
-                # This isn't currently an issue but an assumption that
-                # may not always hold true, depending on how the ArrayView
-                # is constructed.
-                assert array_utils.can_broadcast_shape_to(
-                    self.sel.get_broadcastable_block_shape(self.block_shape),
-                    self._source.block_shape,
-                )
-                return self.create_references(concrete_cls)
-            else:
-                return self.create_basic_single_step(concrete_cls)
-        else:
+        if not self.sel.basic_steps():
             return self.create_basic_multi_step(concrete_cls)
+        if not self.sel.is_aligned(self._source.block_shape):
+            return self.create_basic_single_step(concrete_cls)
+        # Assertion below should form a conjunction with the above condition.
+        # This isn't currently an issue but an assumption that
+        # may not always hold true, depending on how the ArrayView
+        # is constructed.
+        assert array_utils.can_broadcast_shape_to(
+            self.sel.get_broadcastable_block_shape(self.block_shape),
+            self._source.block_shape,
+        )
+        return self.create_references(concrete_cls)
 
     def create_references(self, concrete_cls) -> BlockArrayBase:
         # TODO (hme): Double check this.
@@ -233,25 +231,20 @@ class ArrayView:
         if 0 in dst_sel.get_output_shape():
             # Nothing to do.
             return
-        if dst_sel.basic_steps():
-            value_is_aligned = True
-            if isinstance(value, ArrayView):
-                value_is_aligned = value.sel.is_aligned(value._source.block_shape)
+        if not dst_sel.basic_steps():
+            return self.basic_assign_multi_step(dst_sel, value)
+        value_is_aligned = True
+        if isinstance(value, ArrayView):
+            value_is_aligned = value.sel.is_aligned(value._source.block_shape)
+        return (
+            self.assign_references(dst_sel, value)
             if (
                 value_is_aligned
                 and dst_sel.is_aligned(self._source.block_shape)
                 and self.block_shape == value.block_shape
-            ):
-                # TODO (hme): Sometimes self.block_shape != value.block_shape
-                #  when it is in fact equal. This happens when value
-                #  is created from the last block of its source,
-                #  and is being assigned to the last block of this view's source.
-                #  This is a minor issue.
-                return self.assign_references(dst_sel, value)
-            else:
-                return self.basic_assign_single_step(dst_sel, value)
-        else:
-            return self.basic_assign_multi_step(dst_sel, value)
+            )
+            else self.basic_assign_single_step(dst_sel, value)
+        )
 
     def assign_references(self, dst_sel: BasicSelection, value):
         # TODO (hme): This seems overly complicated, but correct. Double check it.
@@ -355,7 +348,7 @@ class ArrayView:
         elif isinstance(value, BlockArrayBase):
             src_ba_bc: BlockArrayBase = value.broadcast_to(dst_sel.get_output_shape())
         else:
-            raise Exception("Unexpected value type %s." % type(value))
+            raise Exception(f"Unexpected value type {type(value)}.")
         # Different lengths occur when an index is used to perform
         # a selection on an axis. Numpy semantics drops such axes. To allow operations
         # between source and destination selections, dropped axes are restored with dimension 1
@@ -420,7 +413,7 @@ class ArrayView:
                     src_intersection_block - dst_sel_block.position()
                 )
                 dst_params.append((dst_block_sel_loc.selector(), dst_block.transposed))
-            if len(src_oids) == 0:
+            if not src_oids:
                 continue
             dst_block.oid = self._km.update_block(
                 dst_block.oid,

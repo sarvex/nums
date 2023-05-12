@@ -41,7 +41,7 @@ def _start_rabit_tracker(num_workers: int):
     rabit_tracker = xgb.RabitTracker(hostIP=host, nslave=num_workers)
 
     # Get tracker Host + IP
-    env.update(rabit_tracker.slave_envs())
+    env |= rabit_tracker.slave_envs()
     rabit_tracker.start(num_workers)
 
     # Wait until context completion
@@ -57,7 +57,7 @@ class RabitContext:
 
     def __init__(self, actor_id, args):
         self.args = args
-        self.args.append(("DMLC_TASK_ID=[xgboost.modin]:" + actor_id).encode())
+        self.args.append(f"DMLC_TASK_ID=[xgboost.modin]:{actor_id}".encode())
 
     def __enter__(self):
         xgb.rabit.init(self.args)
@@ -73,7 +73,7 @@ def xgb_train_remote(X, y, rabit_args, params, args, kwargs, *evals_flat):
     for i in range(0, len(evals_flat), 3):
         eval_X, eval_y, eval_method = evals_flat[i : i + 3]
         evals.append((xgb.DMatrix(eval_X, eval_y), eval_method))
-    evals_result = dict()
+    evals_result = {}
 
     s = time.time()
     with RabitContext(uuid.uuid4().hex, rabit_args):
@@ -85,14 +85,13 @@ def xgb_train_remote(X, y, rabit_args, params, args, kwargs, *evals_flat):
             evals_result=evals_result,
             **kwargs
         )
-        logging.getLogger(__name__).info("Local Train: {}".format(time.time() - s))
+        logging.getLogger(__name__).info(f"Local Train: {time.time() - s}")
         return np.array({"bst": bst, "evals_result": evals_result}, dtype=dict)
 
 
 def xgb_predict_remote(result, X):
     model = result.item()["bst"]
-    y_pred = (model.predict(xgb.DMatrix(X)) > 0.5).astype(int)
-    return y_pred
+    return (model.predict(xgb.DMatrix(X)) > 0.5).astype(int)
 
 
 class NumsDMatrix(xgb.DMatrix):
@@ -139,10 +138,7 @@ def train(params: Dict, data: NumsDMatrix, *args, evals=(), **kwargs):
     for grid_entry in X.grid.get_entry_iterator():
         X_block: Block = X.blocks[grid_entry]
         i = grid_entry[0]
-        if len(y.shape) == 1:
-            y_block: Block = y.blocks[i]
-        else:
-            y_block: Block = y.blocks[i, 0]
+        y_block: Block = y.blocks[i] if len(y.shape) == 1 else y.blocks[i, 0]
         syskwargs = {"grid_entry": grid_entry, "grid_shape": X.grid.grid_shape}
         result.blocks[i].oid = km.call(
             "xgb_train",

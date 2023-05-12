@@ -26,9 +26,7 @@ from nums.core.array.errors import AxisError
 
 
 def to_dtype_cls(dtype):
-    if hasattr(dtype, "__name__"):
-        return dtype
-    return np.__getattribute__(str(dtype))
+    return dtype if hasattr(dtype, "__name__") else np.__getattribute__(str(dtype))
 
 
 def get_uop_output_type(op_name, dtype):
@@ -156,15 +154,15 @@ def broadcastable(a_shape, b_shape, a_block_shape, b_block_shape):
     if result_shape is None:
         return False
     min_bs, max_bs = sorted([a_block_shape, b_block_shape], key=len)
-    for i in range(-1, -len(max_bs) - 1, -1):
-        if -len(min_bs) - 1 < i:
-            if (
-                a_block_shape[i] != b_block_shape[i]
-                and a_block_shape[i] != 1
-                and b_block_shape[i] != 1
-            ):
-                return False
-    return True
+    return not any(
+        -len(min_bs) - 1 < i
+        and (
+            a_block_shape[i] != b_block_shape[i]
+            and a_block_shape[i] != 1
+            and b_block_shape[i] != 1
+        )
+        for i in range(-1, -len(max_bs) - 1, -1)
+    )
 
 
 def get_tensordot_block_params(shape1, ge1, gs1, shape2, ge2, gs2, axes):
@@ -241,14 +239,10 @@ def broadcast_shape_to_alt(from_shape, to_shape):
     to_shape_r = list(reversed(to_shape))
     for i, from_dim in enumerate(from_shape_r):
         to_dim = to_shape_r[i]
-        if from_dim == 1:
-            result_shape.append(to_dim)
-        elif to_dim == from_dim:
+        if from_dim == 1 or to_dim == from_dim:
             result_shape.append(to_dim)
         else:
-            raise ValueError(
-                "Cannot broadcast %s to %s." % (str(from_shape), str(to_shape))
-            )
+            raise ValueError(f"Cannot broadcast {str(from_shape)} to {str(to_shape)}.")
     return tuple(reversed(result_shape + to_shape_r[from_num_axes:]))
 
 
@@ -271,20 +265,19 @@ def block_shape_from_subscript(subscript: tuple, block_shape: tuple):
 def get_slices(total_size, batch_size, order, reverse_blocks=False):
     assert order in (-1, 1)
     if order > 0:
-        if reverse_blocks:
-            result = list(reversed(list(range(total_size, 0, -batch_size)) + [0]))
-        else:
-            result = list(range(0, total_size, batch_size)) + [total_size]
-        return list(map(lambda s: slice(*s, order), zip(*(result[:-1], result[1:]))))
+        result = (
+            list(reversed(list(range(total_size, 0, -batch_size)) + [0]))
+            if reverse_blocks
+            else list(range(0, total_size, batch_size)) + [total_size]
+        )
+    elif reverse_blocks:
+        # If reverse order blocks are not multiples of axis dimension,
+        # then the last block is smaller than block size and should be
+        # the first block.
+        result = list(reversed(list(range(-total_size - 1, -1, batch_size)) + [-1]))
     else:
-        if reverse_blocks:
-            # If reverse order blocks are not multiples of axis dimension,
-            # then the last block is smaller than block size and should be
-            # the first block.
-            result = list(reversed(list(range(-total_size - 1, -1, batch_size)) + [-1]))
-        else:
-            result = list(range(-1, -total_size - 1, -batch_size)) + [-total_size - 1]
-        return list(map(lambda s: slice(*s, order), zip(*(result[:-1], result[1:]))))
+        result = list(range(-1, -total_size - 1, -batch_size)) + [-total_size - 1]
+    return list(map(lambda s: slice(*s, order), zip(*(result[:-1], result[1:]))))
 
 
 class OrderedGrid:
@@ -346,8 +339,7 @@ def slice_sel_to_index_list(slice_selection: tuple):
             slice_ranges.append(list(range(slice_or_index.start, slice_or_index.stop)))
         elif is_regular_subscript(slice_or_index):
             slice_ranges.append([slice_or_index])
-    index_list = list(itertools.product(*slice_ranges))
-    return index_list
+    return list(itertools.product(*slice_ranges))
 
 
 def translate_index_list(from_index_list, from_shape, to_shape):
@@ -397,10 +389,7 @@ def np_tensordot_param_test(as_, nda, bs, ndb, axes):
             if axes_b[k] < 0:
                 axes_b[k] += ndb
 
-    if not equal:
-        return True
-
-    return False
+    return not equal
 
 
 # NumPy's internal axis-checking logic
@@ -445,8 +434,6 @@ def normalize_axis_index(axis, ndim):
     """
 
     if -ndim > axis >= ndim:
-        raise AxisError(
-            "axis {} is out of bounds for array of dimension {}".format(axis, ndim)
-        )
+        raise AxisError(f"axis {axis} is out of bounds for array of dimension {ndim}")
 
     return axis % ndim

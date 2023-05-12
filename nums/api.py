@@ -48,11 +48,10 @@ def read(filename: str) -> BlockArray:
     Returns:
         A BlockArray instance.
     """
-    if filename.lower().startswith("s3://"):
-        filename = filename.lower().split("s3://")[-1]
-        return _instance().read_s3(filename)
-    else:
+    if not filename.lower().startswith("s3://"):
         return _instance().read_fs(filename)
+    filename = filename.lower().split("s3://")[-1]
+    return _instance().read_s3(filename)
 
 
 def write(filename: str, ba: BlockArray) -> BlockArray:
@@ -64,11 +63,10 @@ def write(filename: str, ba: BlockArray) -> BlockArray:
     Returns:
         A BlockArray indicating the outcome of this operation.
     """
-    if filename.lower().startswith("s3://"):
-        filename = filename.lower().split("s3://")[-1]
-        return _instance().write_s3(ba, filename)
-    else:
+    if not filename.lower().startswith("s3://"):
         return _instance().write_fs(ba, filename)
+    filename = filename.lower().split("s3://")[-1]
+    return _instance().write_s3(ba, filename)
 
 
 def delete(filename: str) -> bool:
@@ -80,11 +78,10 @@ def delete(filename: str) -> bool:
     Returns:
         A BlockArray indicating the outcome of this operation.
     """
-    if filename.lower().startswith("s3://"):
-        filename = filename.lower().split("s3://")[-1]
-        return _instance().delete_s3(filename)
-    else:
+    if not filename.lower().startswith("s3://"):
         return _instance().delete_fs(filename)
+    filename = filename.lower().split("s3://")[-1]
+    return _instance().delete_s3(filename)
 
 
 def read_csv(filename, dtype=float, delimiter=",", has_header=False) -> BlockArray:
@@ -117,10 +114,10 @@ def from_modin(df):
             "Unable to import modin. Install modin with command 'pip install modin'"
         ) from e
 
-    assert isinstance(df, DataFrame), "Unexpected dataframe type %s" % str(type(df))
+    assert isinstance(df, DataFrame), f"Unexpected dataframe type {str(type(df))}"
     assert isinstance(
         df._query_compiler._modin_frame, PandasOnRayFrame
-    ), "Unexpected dataframe type %s" % str(type(df._query_compiler._modin_frame))
+    ), f"Unexpected dataframe type {str(type(df._query_compiler._modin_frame))}"
     frame: PandasOnRayFrame = df._query_compiler._modin_frame
 
     app: ArrayApplication = _instance()
@@ -129,7 +126,7 @@ def from_modin(df):
     # Make sure the partitions are numeric.
     dtype = frame.dtypes[0]
     if not array_utils.is_supported(dtype, type_test=True):
-        raise TypeError("%s is not supported." % str(dtype))
+        raise TypeError(f"{str(dtype)} is not supported.")
     for dt in frame.dtypes:
         if dt != dtype:
             raise TypeError("Mixed types are not supported (%s != %s).")
@@ -162,8 +159,7 @@ def from_modin(df):
                 cols, axis=1, axis_block_size=block_shape[1]
             )
         rows.append(row_ba)
-    result = app.concatenate(rows, axis=0, axis_block_size=block_shape[0])
-    return result
+    return app.concatenate(rows, axis=0, axis_block_size=block_shape[0])
 
 
 def zarr_group(url):

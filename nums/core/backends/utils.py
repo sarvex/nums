@@ -32,7 +32,7 @@ def get_num_cores(reserved_for_os=2):
     cores = int(all_cores // 2 * 2)
     if cores != all_cores:
         warnings.warn(
-            "Detected odd number of cores (%s), using %s instead." % (all_cores, cores)
+            f"Detected odd number of cores ({all_cores}), using {cores} instead."
         )
     if cores <= reserved_for_os:
         # If cores == reserved_for_os, then we'll have no cores left for NumS.
@@ -64,10 +64,7 @@ def extract_functions(imp_cls, remove_self=True):
     imp_functions = {}
     for name, obj in inspect.getmembers(imp_cls()):
         if inspect.ismethod(obj):
-            if remove_self:
-                imp_functions[name] = wrap_func(obj)
-            else:
-                imp_functions[name] = obj
+            imp_functions[name] = wrap_func(obj) if remove_self else obj
     return imp_functions
 
 
@@ -76,7 +73,7 @@ def check_implementation(interface_cls, imp):
     required_methods = inspect.getmembers(interface_cls(), predicate=inspect.ismethod)
     for name, func in required_methods:
         # Make sure the function exists.
-        assert name in imp_functions, "%s not implemented." % name
+        assert name in imp_functions, f"{name} not implemented."
         # Make sure all parameters are there.
         for varname in func.__code__.co_varnames:
             # Ignore matching on self and scheduling args.
@@ -110,11 +107,11 @@ def get_module_functions(module):
 
 
 def get_instance_functions(class_inst):
-    class_inst_funcs = {}
-    for name, obj in inspect.getmembers(class_inst):
-        if inspect.ismethod(obj):
-            class_inst_funcs[name] = obj
-    return class_inst_funcs
+    return {
+        name: obj
+        for name, obj in inspect.getmembers(class_inst)
+        if inspect.ismethod(obj)
+    }
 
 
 def get_private_ip():

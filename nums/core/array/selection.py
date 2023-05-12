@@ -23,10 +23,7 @@ import nums.core.array.utils as array_utils
 def get_array_order(array, axis=0):
     # An axis is ordered if all diffs have same sign, and no diffs of 0 (no repetitions).
     if array.shape[axis] == 1:
-        if array[axis] >= 0:
-            return 1
-        else:
-            return -1
+        return 1 if array[axis] >= 0 else -1
     diffs = np.diff(array, axis=axis)
     if np.all(diffs > 0):
         return 1
@@ -43,11 +40,7 @@ def is_advanced_selection(subscript: tuple):
     num_indexes = 0
     for obj in subscript:
         if array_utils.is_array_like(obj):
-            if isinstance(obj, np.ndarray):
-                array = obj
-            else:
-                # TODO (hme): This is inefficient.
-                array = np.array(obj, dtype=int)
+            array = obj if isinstance(obj, np.ndarray) else np.array(obj, dtype=int)
             if len(array.shape) > 1:
                 return True
             elif get_array_order(array, axis=0) == 0:
@@ -57,11 +50,7 @@ def is_advanced_selection(subscript: tuple):
             num_indexes += 1
     if num_ordered_arrays > 1:
         return True
-    if num_ordered_arrays == 1:
-        # In this case, indexes is considered an advanced index.
-        return num_indexes > 0
-    # We can compute ordered arrays fast, so don't consider ordered arrays as advanced.
-    return False
+    return num_indexes > 0 if num_ordered_arrays == 1 else False
 
 
 def pos_step_slice_to_range(n, start_bound, stop_bound):
@@ -75,7 +64,7 @@ def neg_step_slice_to_range(n, start_bound, stop_bound):
     # Any start, stop above (start_bound - stop_bound)
     # is outside the bounds of the slice parameters
     # for backward steps.
-    if 0 <= n:
+    if n >= 0:
         n -= start_bound - stop_bound
     # Similar to positive steps,
     # any start, stop below the stop bounds is clipped for negative steps.
@@ -153,10 +142,7 @@ class AxisSlice(AxisSelection):
         self.step = step
 
     def is_empty(self):
-        if self.order() > 0:
-            return self.stop <= self.start
-        else:
-            return self.start <= self.stop
+        return self.stop <= self.start if self.order() > 0 else self.start <= self.stop
 
     def selector(self):
         return self.to_slice()
@@ -219,7 +205,7 @@ class AxisArray(AxisSelection):
     # See https://numpy.org/doc/stable/reference/arrays.indexing.html#integer-array-indexing
     def __init__(self, array_like):
         if isinstance(array_like, np.ndarray):
-            assert array_like.dtype.kind == "i" or array_like.dtype.kind == "b"
+            assert array_like.dtype.kind in ["i", "b"]
             arr: np.ndarray = array_like
         else:
             # Must infer type.
@@ -284,10 +270,10 @@ class BasicSelection:
 
     @classmethod
     def from_subscript(cls, shape: Tuple, subscript: Tuple):
-        axis_sels: List[AxisSelection] = []
         contains_ellipsis = False
         contains_array = False
         i = 0
+        axis_sels: List[AxisSelection] = []
         for axis_ss in subscript:
             if axis_ss is Ellipsis:
                 if contains_ellipsis:
@@ -306,15 +292,12 @@ class BasicSelection:
                 i += 1
             elif isinstance(axis_ss, (list, tuple, np.ndarray)):
                 if contains_array:
-                    raise ValueError(
-                        "%s may contain at most 1 array." % BasicSelection.__name__
-                    )
+                    raise ValueError(f"{BasicSelection.__name__} may contain at most 1 array.")
                 contains_array = True
                 axis_array = AxisArray(axis_ss)
                 if len(axis_array.array.shape) > 1:
                     raise ValueError(
-                        "%s does not support multi-axis"
-                        " arrays." % BasicSelection.__name__
+                        f"{BasicSelection.__name__} does not support multi-axis arrays."
                     )
                 if axis_array.array.dtype.kind == "i" and np.any(
                     axis_array.array >= shape[i]
@@ -357,7 +340,7 @@ class BasicSelection:
             elif len(axis_shape) == 1:
                 oshape = oshape + list(axis_shape)
             else:
-                raise ValueError("Invalid axis shape %s" % str(axis_shape))
+                raise ValueError(f"Invalid axis shape {str(axis_shape)}")
         return tuple(oshape)
 
     def get_broadcastable_block_shape(self, partial_block_shape):
@@ -389,7 +372,7 @@ class BasicSelection:
                     obs.insert(0, partial_block_shape[j])
                     j -= 1
             else:
-                raise ValueError("Invalid axis shape %s" % str(axis_shape))
+                raise ValueError(f"Invalid axis shape {str(axis_shape)}")
         for k in range(j, -partial_len - 1, -1):
             assert partial_block_shape[k] == 1
         return obs
@@ -402,12 +385,10 @@ class BasicSelection:
                 if len(axis_shape) == 0:
                     if include_indexes:
                         oshape.append(1)
-                    else:
-                        continue
                 elif len(axis_shape) == 1:
                     oshape = oshape + list(axis_shape)
                 else:
-                    raise ValueError("Invalid axis shape %s" % str(axis_shape))
+                    raise ValueError(f"Invalid axis shape {str(axis_shape)}")
             if include_indexes:
                 # Never store output shape that includes indexes.
                 return tuple(oshape)
@@ -437,11 +418,10 @@ class BasicSelection:
         return Position.from_selection(self, compute_stop)
 
     def basic_steps(self):
-        for item in self.axes:
-            if isinstance(item, AxisSlice):
-                if item.step not in (None, 1):
-                    return False
-        return True
+        return not any(
+            isinstance(item, AxisSlice) and item.step not in (None, 1)
+            for item in self.axes
+        )
 
     def is_aligned(self, block_shape):
         start_pos: Position = self.position()
@@ -557,14 +537,14 @@ class BasicSelection:
         a_step = 1 if a.step is None else a.step
         b_step = 1 if b.step is None else b.step
         if a_step == 1 and b_step == 1:
-            start = b.start if a.start < b.start else a.start
-            stop = a.stop if a.stop < b.stop else b.stop
+            start = max(a.start, b.start)
+            stop = min(a.stop, b.stop)
             step = None if a.step is None and b.step is None else 1
         elif (a_step < 0 < b_step) or (b_step < 0 < a_step):
             # Steps running in opposite directions.
             # Based on intersection of partial orders, the order is undefined.
             start, stop, step = 0, 0, None
-        elif 0 < a_step and 0 < b_step:
+        elif a_step > 0 and b_step > 0:
             assert a.start >= 0 and b.start >= 0 and a.stop >= 0 and b.stop >= 0
             # TODO(hme): Optimize this by avoiding array instantiation.
             arr = self._array_and_array(
@@ -680,7 +660,7 @@ class Position:
                         min(axsel.array) if axsel.order() > 0 else max(axsel.array)
                     )
             else:
-                ValueError("Unexpected axis type %s" % type(sel[i]))
+                ValueError(f"Unexpected axis type {type(sel[i])}")
             if axsel.order() < 0:
                 value[i] += 1
         return cls(value)
@@ -714,10 +694,10 @@ class Position:
             result = Position.from_dim(self.dim)
             if bop == "add":
                 result.value = self.value + other.value
-            elif bop == "sub":
-                result.value = self.value - other.value
             elif bop == "rsub":
                 result.value = other.value - self.value
+            elif bop == "sub":
+                result.value = self.value - other.value
             return result
         elif isinstance(other, BasicSelection):
             if bop == "sub":
@@ -725,7 +705,7 @@ class Position:
                 # The new subscript bounds are unclear in this case.
                 raise ValueError("Cannot subtract BasicSelection from Position.")
             elif bop not in ("add", "rsub"):
-                raise ValueError("Unsupported op encountered %s" % bop)
+                raise ValueError(f"Unsupported op encountered {bop}")
             assert self.dim == len(other.shape)
             # TODO (hme): Test shape addition / subtraction under various circumstances.
             #  This should work okay, but does it work because of prior assumptions
@@ -760,9 +740,7 @@ class Position:
                     elif bop == "rsub":
                         sel[i] = sel[i].copy() - self.value[i]
                 else:
-                    raise ValueError(
-                        "Unsupported instance encountered %s" % type(sel[i])
-                    )
+                    raise ValueError(f"Unsupported instance encountered {type(sel[i])}")
             shape: tuple = tuple(shape)
             sel: tuple = tuple(sel)
             return BasicSelection.from_subscript(shape, sel)

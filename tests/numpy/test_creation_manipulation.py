@@ -36,7 +36,7 @@ def test_basic_creation(nps_app_inst):
         if "ones" in op:
             assert nps.allclose(nps.ones(shape), ba)
 
-        ba2: BlockArray = nps.__getattribute__(op + "_like")(ba)
+        ba2: BlockArray = nps.__getattribute__(f"{op}_like")(ba)
         assert ba.shape == ba2.shape
         assert ba.dtype == ba2.dtype
         assert ba.block_shape == ba2.block_shape

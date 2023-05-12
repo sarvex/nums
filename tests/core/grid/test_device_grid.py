@@ -25,7 +25,7 @@ def mock_devices(num_nodes, devices_per_node=1):
     r = []
     for node_id in range(num_nodes):
         for device in range(devices_per_node):
-            did = Device(node_id, "node%s" % node_id, "cpu", device)
+            did = Device(node_id, f"node{node_id}", "cpu", device)
             r.append(did)
     return r
 
@@ -113,15 +113,17 @@ def test_device():
     devices: List[Device] = mock_devices(int(np.product(cluster_shape)))
     cyclic_grid: CyclicDeviceGrid = CyclicDeviceGrid(cluster_shape, "cpu", devices)
 
-    touched_devices = set()
-    for grid_entry in grid.get_entry_iterator():
-        touched_devices.add(cyclic_grid.get_device(grid_entry, grid.grid_shape))
+    touched_devices = {
+        cyclic_grid.get_device(grid_entry, grid.grid_shape)
+        for grid_entry in grid.get_entry_iterator()
+    }
     assert len(touched_devices) == len(devices)
 
     packed_grid: PackedDeviceGrid = PackedDeviceGrid(cluster_shape, "cpu", devices)
-    touched_devices = set()
-    for grid_entry in grid.get_entry_iterator():
-        touched_devices.add(packed_grid.get_device(grid_entry, grid.grid_shape))
+    touched_devices = {
+        packed_grid.get_device(grid_entry, grid.grid_shape)
+        for grid_entry in grid.get_entry_iterator()
+    }
     assert len(touched_devices) == len(devices)
 
 

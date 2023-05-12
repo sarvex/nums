@@ -28,9 +28,7 @@ from nums.core.kernel.kernel_manager import KernelManager
 
 def subsample(total_items, max_items, rs: np.random.RandomState):
     perms = rs.permutation(total_items)
-    if total_items < max_items:
-        return perms
-    return perms[:max_items]
+    return perms if total_items < max_items else perms[:max_items]
 
 
 class TreeNode(object):
@@ -51,9 +49,7 @@ class TreeNode(object):
         self._expression = None
 
     def get_root(self):
-        if self.parent is None:
-            return self
-        return self.parent.get_root()
+        return self if self.parent is None else self.parent.get_root()
 
     def get_children(self):
         raise NotImplementedError()
@@ -158,11 +154,7 @@ class Leaf(TreeNode):
 
     def __repr__(self):
         device: Device = self.block.device()
-        return "Leaf(id=%s, bid=%s, device=%s)" % (
-            str(self.tree_node_id),
-            str(self.block.id),
-            str(device),
-        )
+        return f"Leaf(id={str(self.tree_node_id)}, bid={str(self.block.id)}, device={str(device)})"
 
     def num_nodes(self):
         return 1
@@ -236,11 +228,7 @@ class UnaryOp(TreeNode):
         self.op_name = None
 
     def __repr__(self):
-        return "UnaryOp(name=%s, id=%s, child=%s)" % (
-            self.op_name,
-            str(self.tree_node_id),
-            str(self.child.tree_node_id),
-        )
+        return f"UnaryOp(name={self.op_name}, id={str(self.tree_node_id)}, child={str(self.child.tree_node_id)})"
 
     def get_children(self):
         return [self.child]
@@ -272,10 +260,7 @@ class UnaryOp(TreeNode):
         return isinstance(self.child, Leaf)
 
     def get_frontier(self):
-        if self.is_frontier():
-            return [self]
-        else:
-            return self.child.get_frontier()
+        return [self] if self.is_frontier() else self.child.get_frontier()
 
     def num_nodes(self):
         return self.child.num_nodes() + 1
@@ -289,8 +274,7 @@ class UnaryOp(TreeNode):
             else:
                 # Restrict device ids to the nodes on which the leafs already reside.
                 devices = self.cluster_state.get_block_devices(self.child.block.id)
-            for device in devices:
-                actions.append((self.tree_node_id, {"device": device}))
+            actions.extend((self.tree_node_id, {"device": device}) for device in devices)
         return actions
 
     def simulate_on(self, device: Device, leaf_ids=None) -> np.ndarray:
@@ -373,10 +357,7 @@ class UnaryOp(TreeNode):
 
     def expression(self):
         if self._expression is None:
-            self._expression = "UnaryOp(op=%s, x=%s)" % (
-                self.op_name,
-                self.child.expression(),
-            )
+            self._expression = f"UnaryOp(op={self.op_name}, x={self.child.expression()})"
         return self._expression
 
     def fuse(self, func_node, km: KernelManager):
@@ -489,12 +470,7 @@ class ReduceAxis(UnaryOp):
 
     def expression(self):
         if self._expression is None:
-            self._expression = "ReduceAxis(op=%s, x=%s, axis=%s, keepdims=%s)" % (
-                self.op_name,
-                self.child.expression(),
-                str(self.axis),
-                str(self.keepdims),
-            )
+            self._expression = f"ReduceAxis(op={self.op_name}, x={self.child.expression()}, axis={str(self.axis)}, keepdims={str(self.keepdims)})"
         return self._expression
 
     def fuse(self, func_node, km: KernelManager):
@@ -533,12 +509,7 @@ class BinaryOp(TreeNode):
             "matmul": "@",
             "tensordot": "@",
         }[self.op_name]
-        return "BOp(id=%s, op=%s%s%s)" % (
-            self.tree_node_id,
-            str(self.left.tree_node_id),
-            bop_symbol,
-            str(self.right.tree_node_id),
-        )
+        return f"BOp(id={self.tree_node_id}, op={str(self.left.tree_node_id)}{bop_symbol}{str(self.right.tree_node_id)})"
 
     def get_children(self):
         return [self.left, self.right]
@@ -604,8 +575,7 @@ class BinaryOp(TreeNode):
                 devices = self.cluster_state.union_devices(
                     self.left.block.id, self.right.block.id
                 )
-            for device in devices:
-                actions.append((self.tree_node_id, {"device": device}))
+            actions.extend((self.tree_node_id, {"device": device}) for device in devices)
         return actions
 
     def simulate_on(self, device: Device, leaf_ids=None) -> np.ndarray:
@@ -684,7 +654,7 @@ class BinaryOp(TreeNode):
         right_grid_entry = self.right.grid_entry()
         left_grid_shape = self.left.grid_shape()
         right_grid_shape = self.right.grid_shape()
-        if self.op_name == "matmul" or self.op_name == "tensordot":
+        if self.op_name in ["matmul", "tensordot"]:
             assert isinstance(self.args, dict)
             axes = self.args.get("axes", 1)
             this_sum_axes = left_shape[-axes:]
@@ -742,19 +712,10 @@ class BinaryOp(TreeNode):
 
     def expression(self):
         if self._expression is None:
-            if self.op_name == "matmul" or self.op_name == "tensordot":
+            if self.op_name in ["matmul", "tensordot"]:
                 axes = self.args.get("axes", 1)
-                self._expression = "BinaryOp(op=%s, x=%s, y=%s, axes=%s)" % (
-                    self.op_name,
-                    self.left.expression(),
-                    self.right.expression(),
-                    axes,
-                )
-            self._expression = "BinaryOp(op=%s, x=%s, y=%s)" % (
-                self.op_name,
-                self.left.expression(),
-                self.right.expression(),
-            )
+                self._expression = f"BinaryOp(op={self.op_name}, x={self.left.expression()}, y={self.right.expression()}, axes={axes})"
+            self._expression = f"BinaryOp(op={self.op_name}, x={self.left.expression()}, y={self.right.expression()})"
         return self._expression
 
     def fuse(self, func_node, km: KernelManager):
@@ -810,21 +771,13 @@ class FunctionNode(TreeNode):
         km.register(self.op_hash, self.op_func, {})
 
     def __repr__(self):
-        return "Function(id=%s, op=%s, args=%s" % (
-            self.tree_node_id,
-            self.op_hash,
-            len(self.children),
-        )
+        return f"Function(id={self.tree_node_id}, op={self.op_hash}, args={len(self.children)}"
 
     def get_children(self):
         return self.children
 
     def num_nodes(self):
-        # Count self.
-        num_nodes = 1
-        for child in self.children:
-            num_nodes += child.num_nodes()
-        return num_nodes
+        return 1 + sum(child.num_nodes() for child in self.children)
 
     def copy(self, cluster_state, parent=None, new_ids=False):
         fnode = FunctionNode(cluster_state, None if new_ids else self.tree_node_id)
@@ -896,8 +849,7 @@ class FunctionNode(TreeNode):
                     leaf: Leaf = child
                     devices |= set(self.cluster_state.get_block_devices(leaf.block.id))
             devices = list(devices)
-            for device in devices:
-                actions.append((self.tree_node_id, {"device": device}))
+            actions.extend((self.tree_node_id, {"device": device}) for device in devices)
         return actions
 
     def simulate_on(self, device: Device, leaf_ids=None) -> np.ndarray:
@@ -1006,21 +958,13 @@ class Einsum(TreeNode):
         self.children: List[TreeNode] = None
 
     def __repr__(self):
-        return "Einsum(id=%s, subscript=%s, operands=%s" % (
-            self.tree_node_id,
-            self.subscript,
-            len(self.children),
-        )
+        return f"Einsum(id={self.tree_node_id}, subscript={self.subscript}, operands={len(self.children)}"
 
     def get_children(self):
         return self.children
 
     def num_nodes(self):
-        # Count self.
-        num_nodes = 1
-        for child in self.children:
-            num_nodes += child.num_nodes()
-        return num_nodes
+        return 1 + sum(child.num_nodes() for child in self.children)
 
     def copy(self, cluster_state, parent=None, new_ids=False):
         rnode = Einsum(cluster_state, None if new_ids else self.tree_node_id)
@@ -1090,8 +1034,7 @@ class Einsum(TreeNode):
                     leaf: Leaf = child
                     devices |= set(self.cluster_state.get_block_devices(leaf.block.id))
             devices = list(devices)
-            for device in devices:
-                actions.append((self.tree_node_id, {"device": device}))
+            actions.extend((self.tree_node_id, {"device": device}) for device in devices)
         return actions
 
     def simulate_on(self, device: Device, leaf_ids=None) -> np.ndarray:

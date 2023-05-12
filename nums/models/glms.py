@@ -91,12 +91,10 @@ class GLM:
         elif isinstance(random_state, NumsRandomState):
             self.rs: NumsRandomState = random_state
         else:
-            raise Exception(
-                "Unexpected type for random_state %s" % str(type(random_state))
-            )
+            raise Exception(f"Unexpected type for random_state {str(type(random_state))}")
         self._penalty = None if penalty == "none" else penalty
         if self._penalty not in (None, "l1", "l2", "elasticnet"):
-            raise NotImplementedError("%s penalty not supported" % self._penalty)
+            raise NotImplementedError(f"{self._penalty} penalty not supported")
         # All sources use lambda as regularization term, and alpha l1/l2 ratio.
         self._lambda = alpha
         self._l1penalty = None
@@ -168,7 +166,7 @@ class GLM:
             )
             self._l1penalty_vec[-1] = 0.0
 
-        if self._opt == "gd" or self._opt == "sgd" or self._opt == "block_sgd":
+        if self._opt in ["gd", "sgd", "block_sgd"]:
             lr: BlockArray = self._app.scalar(self._lr)
             if self._opt == "gd":
                 beta = gd(self, beta, X, y, tol, max_iter, lr)
@@ -176,7 +174,7 @@ class GLM:
                 beta = sgd(self, beta, X, y, tol, max_iter, lr)
             else:
                 beta = block_sgd(self, beta, X, y, tol, max_iter, lr)
-        elif self._opt == "newton" or self._opt == "newton-cg":
+        elif self._opt in ["newton", "newton-cg"]:
             if self._opt == "newton-cg":
                 warnings.warn("Specified newton-cg solver, using newton instead.")
             beta = newton(self._app, self, beta, X, y, tol, max_iter)
@@ -187,7 +185,7 @@ class GLM:
         elif self._opt == "lbfgs":
             beta = lbfgs(self._app, self, beta, X, y, tol, max_iter)
         else:
-            raise Exception("Unsupported optimizer specified %s." % self._opt)
+            raise Exception(f"Unsupported optimizer specified {self._opt}.")
         self._beta0 = beta[-1]
         self._beta = beta[:-1]
 
@@ -266,7 +264,7 @@ class GLM:
     def hessian_penalty(self):
         if self._penalty == "l1":
             return 0.0
-        elif self._penalty == "l2" or self._penalty == "elasticnet":
+        elif self._penalty in ["l2", "elasticnet"]:
             return self._l2penalty_diag
         else:
             raise ValueError("Unexpected call to objective term, penalty=None.")
@@ -523,10 +521,7 @@ class PoissonRegression(GLM):
         beta: BlockArray = None,
         mu: BlockArray = None,
     ):
-        if beta is None:
-            eta = X @ self._beta + self._beta0
-        else:
-            eta = X @ beta
+        eta = X @ self._beta + self._beta0 if beta is None else X @ beta
         mu = self._app.exp(eta) if mu is None else mu
         return self._app.sum(mu - y * eta)
 

@@ -72,11 +72,9 @@ def test_select_assign(nps_app_inst):
                 with pytest.raises(ValueError):
                     arr[tuple(ss)] = value
         else:
-            if mode == "scalar":
-                # Run indexed subscripts on scalar values.
-                if idx_axes:
-                    ss[idx_axes[0]], ss[idx_axes[1]] = idx_vals[0], idx_vals[1]
-                    np_ss[idx_axes[0]], np_ss[idx_axes[1]] = idx_vals[0], idx_vals[1]
+            if mode == "scalar" and idx_axes:
+                ss[idx_axes[0]], ss[idx_axes[1]] = idx_vals[0], idx_vals[1]
+                np_ss[idx_axes[0]], np_ss[idx_axes[1]] = idx_vals[0], idx_vals[1]
             arr[tuple(ss)] = value
             np_arr[tuple(np_ss)] = np_value
             assert np.all(np_arr == arr.get())

@@ -49,14 +49,11 @@ class ClusterState(object):
         # The value below is the fraction of network load to use for local transfers.
         # By default, assume an order of magnitude speedup for local transfers.
         self.local_transfer_coeff = local_transfer_coeff
-        if counter is None:
-            self.counter = Counter()
-        else:
-            self.counter = counter
+        self.counter = Counter() if counter is None else counter
         self.devices: List[Device] = devices
         self.num_devices: int = len(self.devices)
         self.node_ids: List[int] = sorted(
-            list(set([device.node_id for device in self.devices]))
+            list({device.node_id for device in self.devices})
         )
         self.num_nodes: int = len(self.node_ids)
         self.workers_per_node: int = self.num_devices // self.num_nodes
@@ -64,7 +61,7 @@ class ClusterState(object):
         workers_per_node = {node_id: 0 for node_id in self.node_ids}
         for device in self.devices:
             workers_per_node[device.node_id] += 1
-        for node_id, count in workers_per_node.items():
+        for count in workers_per_node.values():
             assert self.workers_per_node == count
 
         # The system instance on which we perform operations.

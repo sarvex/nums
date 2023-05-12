@@ -233,9 +233,7 @@ class ArrayApplication:
             if array_utils.is_array_like(array):
                 array = np.array(array)
             else:
-                raise ValueError(
-                    "Unable to instantiate array from type %s" % type(array)
-                )
+                raise ValueError(f"Unable to instantiate array from type {type(array)}")
         assert len(array.shape) == len(block_shape)
         return BlockArray.from_np(
             array, block_shape=block_shape, copy=False, km=self.km
@@ -279,10 +277,9 @@ class ArrayApplication:
         for i in range(num_arrs):
             curr_ba: BlockArray = arrays[i]
             assert num_axes == len(curr_ba.shape), "Unequal num axes."
-            assert curr_ba.dtype == first_arr.dtype, "Incompatible dtypes " "%s, %s" % (
-                curr_ba.dtype,
-                first_arr.dtype,
-            )
+            assert (
+                curr_ba.dtype == first_arr.dtype
+            ), f"Incompatible dtypes {curr_ba.dtype}, {first_arr.dtype}"
             for curr_axis in range(num_axes):
                 first_block_size = first_arr.block_shape[curr_axis]
                 block_size = curr_ba.block_shape[curr_axis]
@@ -455,7 +452,7 @@ class ArrayApplication:
         # Generate ranges per block.
         grid = ArrayGrid(shape, block_shape, dtype.__name__)
         rarr = BlockArray(grid, self.km)
-        for _, grid_entry in enumerate(grid.get_entry_iterator()):
+        for grid_entry in grid.get_entry_iterator():
             syskwargs = {"grid_entry": grid_entry, "grid_shape": grid.grid_shape}
             start = start_in + block_shape[0] * grid_entry[0]
             entry_shape = grid.get_block_shape(grid_entry)
@@ -542,7 +539,7 @@ class ArrayApplication:
     def argop(self, op_name: str, arr: BlockArray, axis=None):
         if len(arr.shape) > 1:
             raise NotImplementedError(
-                "%s currently supports one-dimensional arrays." % op_name
+                f"{op_name} currently supports one-dimensional arrays."
             )
         if axis is None:
             axis = 0
@@ -586,8 +583,6 @@ class ArrayApplication:
         return self.map_bop("xlogy", x, y)
 
     def where(self, condition: BlockArray, x: BlockArray = None, y: BlockArray = None):
-        result_oids = []
-        shape_oids = []
         num_axes = max(1, len(condition.shape))
         # Stronger constraint than necessary, but no reason for anything stronger.
         if x is not None or y is not None:
@@ -597,9 +592,9 @@ class ArrayApplication:
             assert x.dtype == y.dtype
             result = BlockArray(x.grid.copy(), self.km)
             for grid_entry in condition.grid.get_entry_iterator():
-                cond_oid = condition.blocks[grid_entry].oid
                 x_oid = x.blocks[grid_entry].oid
                 y_oid = y.blocks[grid_entry].oid
+                cond_oid = condition.blocks[grid_entry].oid
                 r_oid = self.km.where(
                     cond_oid,
                     x_oid,
@@ -614,6 +609,8 @@ class ArrayApplication:
                 result.blocks[grid_entry].oid = r_oid
             return result
         else:
+            result_oids = []
+            shape_oids = []
             for grid_entry in condition.grid.get_entry_iterator():
                 block: Block = condition.blocks[grid_entry]
                 block_slice_tuples = condition.grid.get_slice_tuples(grid_entry)
@@ -635,29 +632,26 @@ class ArrayApplication:
             result_shape = (np.sum(shapes),)
             if result_shape == (0,):
                 return (self.array(np.array([], dtype=np.int64), block_shape=(0,)),)
-            # Remove empty shapes.
-            result_shape_pair = []
-            for i, shape in enumerate(shapes):
-                if np.sum(shape) > 0:
-                    result_shape_pair.append((result_oids[i], shape))
+            result_shape_pair = [
+                (result_oids[i], shape)
+                for i, shape in enumerate(shapes)
+                if np.sum(shape) > 0
+            ]
             result_block_shape = self.km.compute_block_shape(result_shape, np.int64)
             result_arrays = []
             for axis in range(num_axes):
-                block_arrays = []
-                for i in range(len(result_oids)):
-                    if shapes[i] == (0,):
-                        continue
-                    block_arrays.append(
-                        BlockArray.from_oid(
-                            result_oids[i][axis], shapes[i], np.int64, self.km
-                        )
+                block_arrays = [
+                    BlockArray.from_oid(
+                        result_oids[i][axis], shapes[i], np.int64, self.km
                     )
-                if len(block_arrays) == 1:
-                    axis_result = block_arrays[0]
-                else:
-                    axis_result = self.concatenate(
-                        block_arrays, 0, result_block_shape[0]
-                    )
+                    for i in range(len(result_oids))
+                    if shapes[i] != (0,)
+                ]
+                axis_result = (
+                    block_arrays[0]
+                    if len(block_arrays) == 1
+                    else self.concatenate(block_arrays, 0, result_block_shape[0])
+                )
                 result_arrays.append(axis_result)
             return tuple(result_arrays)
 
@@ -731,7 +725,7 @@ class ArrayApplication:
             raise NotImplementedError("Only 1D 'arr' is currently supported.")
         if not 0 <= q <= 100:
             raise ValueError("Percentiles must be in the range [0, 100]")
-        q = q / 100
+        q /= 100
         return self.quantile(arr, q, interpolation=interpolation, method=method)
 
     def _quickselect(self, arr_oids: List[object], kth: int):
@@ -1063,7 +1057,7 @@ class ArrayApplication:
             raise NotImplementedError("'where' argument is not yet supported.")
         if args is not None:
             raise NotImplementedError("'args' is not yet supported.")
-        if not (kwargs is None or len(kwargs) == 0):
+        if kwargs is not None and len(kwargs) != 0:
             raise NotImplementedError("'kwargs' is not yet supported.")
 
         if not array_utils.broadcastable(
@@ -1123,18 +1117,14 @@ class ArrayApplication:
 
     def get(self, *arrs):
         if len(arrs) == 1:
-            if isinstance(arrs[0], BlockArray):
-                return arrs[0].get()
+            return arrs[0].get() if isinstance(arrs[0], BlockArray) else arrs[0]
+        r = []
+        for item in arrs:
+            if isinstance(item, BlockArray):
+                r.append(item.get())
             else:
-                return arrs[0]
-        else:
-            r = []
-            for item in arrs:
-                if isinstance(item, BlockArray):
-                    r.append(item.get())
-                else:
-                    r.append(item)
-            return r
+                r.append(item)
+        return r
 
     def array_compare(self, func_name, a: BlockArray, b: BlockArray, *args):
         assert a.shape == b.shape and a.block_shape == b.block_shape
@@ -1175,9 +1165,7 @@ class ArrayApplication:
         )
         for i, grid_entry in enumerate(arr.grid.get_entry_iterator()):
             arr.blocks[grid_entry].oid = oids[i]
-        if block_shape != shape:
-            return arr.reshape(block_shape=block_shape)
-        return arr
+        return arr.reshape(block_shape=block_shape) if block_shape != shape else arr
 
     def random_state(self, seed=None):
         return NumsRandomState(self.km, seed)
@@ -1236,15 +1224,9 @@ class ArrayApplication:
         res = []
         for ary in arys:
             ary = BlockArray.to_block_array(ary, self.km)
-            if ary.ndim == 0:
-                result = ary.reshape(1)
-            else:
-                result = ary
+            result = ary.reshape(1) if ary.ndim == 0 else ary
             res.append(result)
-        if len(res) == 1:
-            return res[0]
-        else:
-            return res
+        return res[0] if len(res) == 1 else res
 
     def atleast_2d(self, *arys):
         res = []
@@ -1261,10 +1243,7 @@ class ArrayApplication:
             else:
                 result = ary
             res.append(result)
-        if len(res) == 1:
-            return res[0]
-        else:
-            return res
+        return res[0] if len(res) == 1 else res
 
     def atleast_3d(self, *arys):
         res = []
@@ -1283,10 +1262,7 @@ class ArrayApplication:
             else:
                 result = ary
             res.append(result)
-        if len(res) == 1:
-            return res[0]
-        else:
-            return res
+        return res[0] if len(res) == 1 else res
 
     def _check_or_covert_stack_array(self, arrs):
         if not isinstance(arrs, list):

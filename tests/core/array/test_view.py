@@ -29,15 +29,12 @@ def get_slices(size, index_multiplier=1, limit=None, basic_step=False):
     index_multiplier = [None] + list(
         range(-size * index_multiplier, size * index_multiplier + 1)
     )
-    items = list()
-    for start, stop, step in itertools.product(index_multiplier, repeat=3):
-        if step == 0 or (basic_step and step not in (None, 1)):
-            continue
-        items.append(slice(start, stop, step))
-    if limit is None:
-        return items
-    else:
-        return subsample(items, limit)
+    items = [
+        slice(start, stop, step)
+        for start, stop, step in itertools.product(index_multiplier, repeat=3)
+        if step != 0 and (not basic_step or step in (None, 1))
+    ]
+    return items if limit is None else subsample(items, limit)
 
 
 def subsample(items, max_items, seed=1337):

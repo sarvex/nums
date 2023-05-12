@@ -78,7 +78,7 @@ class DaskBackend(Backend):
         for node_address in self._node_addresses:
             self._node_to_worker[node_address] = {"workers": []}
             for worker_address in self._worker_addresses:
-                if node_address + ":" in worker_address:
+                if f"{node_address}:" in worker_address:
                     self._node_to_worker[node_address]["workers"].append(worker_address)
             self._node_to_worker[node_address]["workers"] = sorted(
                 self._node_to_worker[node_address]["workers"]
@@ -90,18 +90,16 @@ class DaskBackend(Backend):
 
             if self.workers_per_node is None:
                 self.workers_per_node = num_workers
-            else:
-                if self.workers_per_node != num_workers:
-                    s = ""
-                    s += "\node_address=%s" % node_address
-                    s += "\nworkers_per_node=%s" % self.workers_per_node
-                    s += "\nnum_workers=%s" % num_workers
-                    raise Exception("Unexpected number of workers." + s)
+            elif self.workers_per_node != num_workers:
+                s = ""
+                s += "\node_address=%s" % node_address
+                s += "\nworkers_per_node=%s" % self.workers_per_node
+                s += "\nnum_workers=%s" % num_workers
+                raise Exception(f"Unexpected number of workers.{s}")
 
-        assert self._num_devices % self.workers_per_node == 0, "%s vs %s" % (
-            self._num_devices,
-            self.workers_per_node,
-        )
+        assert (
+            self._num_devices % self.workers_per_node == 0
+        ), f"{self._num_devices} vs {self.workers_per_node}"
         num_nodes = self._num_devices // self.workers_per_node
         self._devices = []
         for node_id in range(num_nodes):
@@ -175,10 +173,9 @@ class DaskBackend(Backend):
             return self._client.submit(
                 func, *args, **kwargs, workers=workers, pure=False
             )
-        else:
-            dfunc = dask.delayed(func, nout=nout)
-            result = tuple(dfunc(*args, **kwargs))
-            return self._client.compute(result, workers=workers)
+        dfunc = dask.delayed(func, nout=nout)
+        result = tuple(dfunc(*args, **kwargs))
+        return self._client.compute(result, workers=workers)
 
     def num_cores_total(self) -> int:
         return len(self._worker_addresses)
@@ -194,21 +191,9 @@ class DaskBackend(Backend):
 
     def make_actor(self, name: str, *args, device: Device = None, **kwargs):
         raise NotImplementedError("Dask actors are not supported.")
-        # Distribute actors round-robin over devices.
-        if device is None:
-            device = self._devices[self._actor_node_index]
-            self._actor_node_index = (self._actor_node_index + 1) % len(self._devices)
-        actor = self._actors[name]
-        node_addr = self._device_to_node[device]
-        future = self._client.submit(actor, actor=True, workers=node_addr)
-        actor = future.result()
-        return actor
 
     def call_actor_method(self, actor, method: str, *args, **kwargs):
         raise NotImplementedError("Dask actors are not supported.")
-        actor_func = getattr(actor, method)
-        actor_future = actor_func(*args, **kwargs)
-        return actor_future
 
 
 class DaskBackendStockScheduler(DaskBackend):
@@ -228,13 +213,12 @@ class DaskBackendStockScheduler(DaskBackend):
         self.init_devices()
 
     def call(self, name: str, args, kwargs, device: Device, options: Dict):
-        assert device is not None, (
-            "Inconsistent usage of %s (device is None)."
-            % DaskBackendStockScheduler.__name__
-        )
-        assert device.node_addr in self._node_to_worker, (
-            "Unexpected node address %s" % device.node_addr
-        )
+        assert (
+            device is not None
+        ), f"Inconsistent usage of {DaskBackendStockScheduler.__name__} (device is None)."
+        assert (
+            device.node_addr in self._node_to_worker
+        ), f"Unexpected node address {device.node_addr}"
         return self._call(
             name,
             args,
@@ -245,10 +229,6 @@ class DaskBackendStockScheduler(DaskBackend):
 
     def make_actor(self, name: str, *args, device: Device = None, **kwargs):
         raise NotImplementedError("Dask actors are not supported.")
-        actor = self._actors[name]
-        future = self._client.submit(actor, actor=True)
-        actor_handle = future.result()
-        return actor_handle
 
     def put(self, value: Any, device: Device):
         return self._client.submit(lambda x: x, value)

@@ -124,8 +124,7 @@ def test_tensordot_all_shapes(app_inst: ArrayApplication):
                 if a_block_shape[-axes:] != b_block_shape[:axes]:
                     continue
                 pbar.set_description(
-                    "axes=%s %s @ %s"
-                    % (str(axes), str(a_block_shape), str(b_block_shape))
+                    f"axes={str(axes)} {str(a_block_shape)} @ {str(b_block_shape)}"
                 )
                 block_a = app_inst.array(a, block_shape=a_block_shape)
                 block_b = app_inst.array(b, block_shape=b_block_shape)

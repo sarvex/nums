@@ -21,9 +21,7 @@ sys.path.insert(0, os.path.abspath("../.."))
 # -- Project information -----------------------------------------------------
 
 project = "NumS"
-copyright = (  # pylint: disable=redefined-builtin
-    str(datetime.now().year) + ", The NumS Team"
-)
+copyright = f"{str(datetime.now().year)}, The NumS Team"
 author = "The NumS Team"
 
 

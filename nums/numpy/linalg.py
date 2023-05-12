@@ -27,7 +27,7 @@ def qr(a: BlockArray, mode="reduced"):
 
 
 def svd(a: BlockArray, full_matrices=False, compute_uv=True, hermitian=False):
-    if not (not full_matrices and compute_uv and not hermitian):
+    if full_matrices or not compute_uv or hermitian:
         raise NotImplementedError("SVD currently supported on default parameters only.")
     return linalg.svd(_instance(), a)
 
@@ -35,10 +35,7 @@ def svd(a: BlockArray, full_matrices=False, compute_uv=True, hermitian=False):
 def inv(a: BlockArray):
     if not a.is_single_block():
         warnings.warn(
-            "nums.numpy.linalg.inv is not a scalable implementation. "
-            + ("Input array is %s bytes. " % a.nbytes)
-            + "Abort this operation if input array is too large to "
-            + "execute on a single node."
+            f"nums.numpy.linalg.inv is not a scalable implementation. Input array is {a.nbytes} bytes. Abort this operation if input array is too large to execute on a single node."
         )
     return linalg.inv(_instance(), a)
 

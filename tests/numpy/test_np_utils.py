@@ -39,9 +39,9 @@ def _inspect_block_shape(nps_app_inst):
         grid: ArrayGrid = ArrayGrid(shape, block_shape, dtype.__name__)
         print()
         print(
-            "dtype=%s" % dtype.__name__,
-            "cluster_shape=%s" % str(cluster_shape),
-            "shape=%s" % str(shape),
+            f"dtype={dtype.__name__}",
+            f"cluster_shape={str(cluster_shape)}",
+            f"shape={str(shape)}",
         )
         print("grid_shape", grid.grid_shape, "block_shape", block_shape)
         print(

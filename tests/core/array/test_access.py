@@ -60,8 +60,8 @@ def test_assign_basic(app_inst: ArrayApplication):
         npy[i, :, :] = npy[i, :, :] + npX[i].T @ npX[i]
         assert np.allclose(npy, y.get()), i
     for i in range(12):
-        y[i, 0, :] = y[i, 0:1, :] + X[i][0:1]
-        npy[i, 0, :] = npy[i, 0:1, :] + npX[i][0:1]
+        y[i, 0, :] = y[i, 0:1, :] + X[i][:1]
+        npy[i, 0, :] = npy[i, 0:1, :] + npX[i][:1]
         assert np.allclose(npy, y.get()), i
 
 
@@ -250,7 +250,7 @@ def test_assign_complete_2dim_slices(app_inst: ArrayApplication):
                                 B_strt[1],
                                 B_stp[1],
                             )
-                            desc = "Testing 2dim slices. %s = %s" % (desc_A, desc_B)
+                            desc = f"Testing 2dim slices. {desc_A} = {desc_B}"
                             pbar.set_description(desc=desc)
                             assert np.allclose(
                                 B[B_strt[0] : B_stp[0], B_strt[1] : B_stp[1]].get(),

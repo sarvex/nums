@@ -45,7 +45,7 @@ class TreeNodeActionPair(object):
         self.actions: list = actions
 
     def __repr__(self):
-        return "TNAP(%s, %s)" % (str(self.node), str(self.actions))
+        return f"TNAP({str(self.node)}, {str(self.actions)})"
 
 
 class ProgramState(object):
@@ -95,7 +95,11 @@ class ProgramState(object):
         grid_entry = self.get_tnode_grid_entry(tnode)
         grid_shape = self.arr.grid.grid_shape
         device = self.device_grid.get_device(grid_entry, grid_shape)
-        if isinstance(tnode, BinaryOp):
+        if (
+            isinstance(tnode, BinaryOp)
+            or not isinstance(tnode, TreeReductionOp)
+            and isinstance(tnode, UnaryOp)
+        ):
             actions = [(tnode.tree_node_id, {"device": device})]
         elif isinstance(tnode, TreeReductionOp):
             # TreeReductionOp maintains an ordered list of leaves,
@@ -106,8 +110,6 @@ class ProgramState(object):
             tnode.final_action_check()
             leaf_ids = tuple(tnode.leafs_dict.keys())[:2]
             actions = [(tnode.tree_node_id, {"device": device, "leaf_ids": leaf_ids})]
-        elif isinstance(tnode, UnaryOp):
-            actions = [(tnode.tree_node_id, {"device": device})]
         else:
             raise Exception()
         return actions
@@ -115,15 +117,22 @@ class ProgramState(object):
     def add_frontier_node(self, tnode: TreeNode):
         # This is a frontier node.
         actions = None
-        if self.force_final_action and tnode.parent is None:
-            if isinstance(tnode, (BinaryOp, UnaryOp)) or (
-                isinstance(tnode, TreeReductionOp) and len(tnode.children_dict) == 2
-            ):
-                # This is a root frontier op.
-                # The next action is the last action,
-                # so intercept action to force computation on device
-                # to satisfy device placement assumptions.
-                actions = self.get_final_action(tnode)
+        if (
+            self.force_final_action
+            and tnode.parent is None
+            and (
+                isinstance(tnode, (BinaryOp, UnaryOp))
+                or (
+                    isinstance(tnode, TreeReductionOp)
+                    and len(tnode.children_dict) == 2
+                )
+            )
+        ):
+            # This is a root frontier op.
+            # The next action is the last action,
+            # so intercept action to force computation on device
+            # to satisfy device placement assumptions.
+            actions = self.get_final_action(tnode)
         if actions is None:
             actions = tnode.get_actions(**self.get_action_kwargs)
         self.tnode_map[tnode.tree_node_id] = TreeNodeActionPair(tnode, actions)
@@ -151,12 +160,8 @@ class ProgramState(object):
             new_node_parent: TreeNode = new_node.parent
             if new_node_parent is not None and new_node_parent.is_frontier():
                 self.add_frontier_node(new_node_parent)
-        else:
-            # There's still work that needs to be done to compute this node.
-            # Add the returned node to the frontier.
-            # Either a BinaryOp or TreeReductionOp.
-            if new_node.is_frontier():
-                self.add_frontier_node(new_node)
+        elif new_node.is_frontier():
+            self.add_frontier_node(new_node)
         # That's it. This program state is now updated.
         return self.objective(self.arr.cluster_state.resources)
 
@@ -174,10 +179,7 @@ class ProgramState(object):
         return np.sum(np.max(resources, axis=1))
 
     def get_tnode_grid_entry(self, tnode: TreeNode):
-        if tnode.parent is None:
-            root: TreeNode = tnode
-        else:
-            root: TreeNode = tnode.get_root()
+        root: TreeNode = tnode if tnode.parent is None else tnode.get_root()
         return root.grid_entry()
 
     def update_root(self, old_root, new_root):

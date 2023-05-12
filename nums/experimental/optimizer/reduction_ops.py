@@ -50,10 +50,7 @@ class TreeReductionOp(TreeNode):
         return [self.children_dict[key] for key in sorted(self.children_dict.keys())]
 
     def num_nodes(self):
-        r = 1
-        for _, child in self.children_dict.items():
-            r += child.num_nodes()
-        return r
+        return 1 + sum(child.num_nodes() for _, child in self.children_dict.items())
 
     def copy(self, cluster_state, parent=None, new_ids=False):
         rop: TreeReductionOp = TreeReductionOp(
@@ -154,7 +151,6 @@ class TreeReductionOp(TreeNode):
     def _get_actions(self, leaf_ids, **kwargs):
         assert len(leaf_ids) == 2
         use_all_devices = kwargs.get("use_all_devices", False)
-        actions = []
         if use_all_devices:
             devices = self.cluster_state.devices
         else:
@@ -162,39 +158,36 @@ class TreeReductionOp(TreeNode):
             left: Leaf = self.leafs_dict[leaf_ids[0]]
             right: Leaf = self.leafs_dict[leaf_ids[1]]
             devices = self.cluster_state.union_devices(left.block.id, right.block.id)
-        for device in devices:
-            actions.append(
-                (self.tree_node_id, {"device": device, "leaf_ids": leaf_ids})
-            )
-        return actions
+        return [
+            (self.tree_node_id, {"device": device, "leaf_ids": leaf_ids})
+            for device in devices
+        ]
 
     def get_actions(self, **kwargs):
         """
         Returns a list of actions.
         An action is a tuple: First entry is a cluster node id, second is a pair of leaf_ids.
         """
-        if self.is_frontier():
-            if len(self.action_leaf_q) == 0:
-                # This is called multiple times.
-                # Only compute action_leaf_q once.
-                if len(self.leafs_dict) == 1:
-                    # The ReductionOp should have returned the last leaf upon executing
-                    # the last pair of leaves.
-                    raise Exception("Unexpected state.")
-                sorted_leafs: List[Leaf] = self._sort_leafs()
-                for leaf in sorted_leafs:
-                    self.action_leaf_q.append(leaf.tree_node_id)
-            leaf_id_pair = tuple(self.action_leaf_q[:2])
-            return self._get_actions(leaf_id_pair)
-        return []
+        if not self.is_frontier():
+            return []
+        if len(self.action_leaf_q) == 0:
+            # This is called multiple times.
+            # Only compute action_leaf_q once.
+            if len(self.leafs_dict) == 1:
+                # The ReductionOp should have returned the last leaf upon executing
+                # the last pair of leaves.
+                raise Exception("Unexpected state.")
+            sorted_leafs: List[Leaf] = self._sort_leafs()
+            for leaf in sorted_leafs:
+                self.action_leaf_q.append(leaf.tree_node_id)
+        leaf_id_pair = tuple(self.action_leaf_q[:2])
+        return self._get_actions(leaf_id_pair)
 
     def final_action_check(self):
         assert self.is_frontier()
         if len(self.action_leaf_q) == 0:
             assert len(self.leafs_dict) == 2
-            self.action_leaf_q = []
-            for tnode_id in self.leafs_dict:
-                self.action_leaf_q.append(tnode_id)
+            self.action_leaf_q = list(self.leafs_dict)
 
     def simulate_on(self, device: Device, leaf_ids=None) -> np.ndarray:
         assert len(leaf_ids) == 2
@@ -328,11 +321,7 @@ class TreeReductionOp(TreeNode):
             # This will force a different hash for large fused reductions,
             # if this is, for whatever reason, needed.
             size = len(self.children_dict)
-            self._expression = "TreeReductionOp(op=%s, size=%s, id=%s)" % (
-                self.op_name,
-                str(size),
-                self.tree_node_id,
-            )
+            self._expression = f"TreeReductionOp(op={self.op_name}, size={size}, id={self.tree_node_id})"
         return self._expression
 
     def fuse(self, func_node, km: KernelManager):

@@ -94,11 +94,10 @@ class KernelCls(KernelImp):
         op_func = np.__getattribute__(op_name)
         grid = ArrayGrid.from_meta(grid_meta)
         block_shape = grid.get_block_shape(grid_entry)
-        if op_name == "eye":
-            assert np.all(np.diff(grid_entry) == 0)
-            return op_func(*block_shape, dtype=grid.dtype)
-        else:
+        if op_name != "eye":
             return op_func(block_shape, dtype=grid.dtype)
+        assert np.all(np.diff(grid_entry) == 0)
+        return op_func(*block_shape, dtype=grid.dtype)
 
     def random_block(self, rng_params, rfunc_name, rfunc_args, shape, dtype):
         rng: Generator = block_rng(*rng_params)
@@ -301,15 +300,14 @@ class KernelCls(KernelImp):
             and op_name == "sum"
             and not keepdims
         ):
-            # We can optimize this with matmul or tensordot.
-            if len(arr.shape) == 2:
-                assert axis in (0, 1)
-                if axis == 0:
-                    return np.matmul(np.ones(arr.shape[0]), arr)
-                else:
-                    return np.matmul(arr, np.ones(arr.shape[1]))
-            else:
+            if len(arr.shape) != 2:
                 return np.tensordot(np.ones(arr.shape[axis]), arr, axes=(0, axis))
+            assert axis in (0, 1)
+            return (
+                np.matmul(np.ones(arr.shape[0]), arr)
+                if axis == 0
+                else np.matmul(arr, np.ones(arr.shape[1]))
+            )
         return op_func(arr, axis=axis, keepdims=keepdims)
 
     # This is essentially a map.

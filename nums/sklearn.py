@@ -86,10 +86,7 @@ def train_test_split(
     shuffle: bool = True,
     stratify=None
 ):
-    # pylint: disable = protected-access
-    updated_arrays = []
-    for array in arrays:
-        updated_arrays.append(_check_array(array))
+    updated_arrays = [_check_array(array) for array in arrays]
     syskwargs = {
         "options": {"num_returns": 2 * len(updated_arrays)},
         "grid_entry": (0,),
@@ -141,15 +138,6 @@ def build_sklearn_actor(cls: type):
         predict_dtype = int
     elif issubclass(cls, RegressorMixin):
         predict_dtype = float
-
-    # NOTE:
-    # A possibly cleaner way of building actor classes is to check all the superclasses, then
-    # procedurally add the methods inherited from those classes. Many superclasses can be found in
-    # sklearn/base.py, and some in other subpackages. For example,
-    # TransformerMixin: add fit_transform(), transform() (fit_transform calls transform)
-    # ClusterMixin: add fit_predict()
-    # LinearClassifierMixin: add decision_function()
-    # BaseEstimator: add get_params(), set_params()
 
     class ModelActor:
         def __init__(self, *args, **kwargs):
@@ -218,8 +206,8 @@ def build_sklearn_actor(cls: type):
             )
             return BlockArray.from_oid(r_oid, shape=(), dtype=float, km=instance().km)
 
-    NumsModel.__name__ = "Nums" + cls.__name__
-    ModelActor.__name__ = cls.__name__ + "Actor"
+    NumsModel.__name__ = f"Nums{cls.__name__}"
+    ModelActor.__name__ = f"{cls.__name__}Actor"
     call_on_create(lambda app: app.km.register_actor(name, ModelActor))
     return NumsModel
 
@@ -326,7 +314,3 @@ def expose_sklearn_objects():
 
 
 (RBF,) = expose_sklearn_objects()
-
-
-if __name__ == "__main__":
-    pass

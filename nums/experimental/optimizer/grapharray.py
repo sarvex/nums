@@ -130,7 +130,7 @@ class GraphArray(object):
         for grid_entry in self.grid.get_entry_iterator():
             root: TreeNode = self.graphs[grid_entry]
             q = [root]
-            while len(q) > 0:
+            while q:
                 node: TreeNode = q.pop(0)
                 q += node.get_children()
                 yield node
@@ -139,7 +139,7 @@ class GraphArray(object):
         blocks: np.ndarray = np.empty(self.grid.grid_shape, dtype=Block)
         for grid_entry in self.grid.get_entry_iterator():
             leaf: TreeNode = self.graphs[grid_entry]
-            assert isinstance(leaf, Leaf), "%s,%s" % (str(leaf), type(leaf))
+            assert isinstance(leaf, Leaf), f"{str(leaf)},{type(leaf)}"
             blocks[grid_entry] = leaf.block
         return blocks
 
@@ -211,9 +211,9 @@ class GraphArray(object):
     def ga_from_arr(self, arr: Union[TreeNode, np.ndarray], result_shape: tuple):
         if isinstance(arr, TreeNode):
             sample_node: TreeNode = arr
-            assert result_shape == ()
+            assert not result_shape
         else:
-            sample_node: TreeNode = arr[tuple(0 for dim in arr.shape)]
+            sample_node: TreeNode = arr[tuple(0 for _ in arr.shape)]
         result_block_shape = sample_node.shape()
         result_dtype_str = self.grid.dtype.__name__
         result_grid = ArrayGrid(
@@ -459,7 +459,7 @@ class GraphArray(object):
         for grid_entry in self.grid.get_entry_iterator():
             graph = self.graphs[grid_entry]
             _, leaf_inputs = traverse_marker(graph, 0)
-            if grid_entry == (0,) or grid_entry == (0, 0):  # generic
+            if grid_entry in [(0,), (0, 0)]:  # generic
                 result_graphs[grid_entry] = FuseGraph(
                     graph, self.km, max_args=max_args
                 )()
@@ -542,16 +542,11 @@ class GraphArray(object):
             # Map input block grid entries.
             input_subgraphs = []
             for i, input_string in enumerate(input_strings):
-                input_grid_entry = []
-                for char in input_string:
-                    input_grid_entry.append(grid_idx[var_to_idx[char]])
+                input_grid_entry = [grid_idx[var_to_idx[char]] for char in input_string]
                 input_grid_entry = tuple(input_grid_entry)
                 input_subgraphs.append(operands[i].graphs[input_grid_entry])
 
-            # Map output block grid entry.
-            output_grid_entry = []
-            for char in output_string:
-                output_grid_entry.append(grid_idx[var_to_idx[char]])
+            output_grid_entry = [grid_idx[var_to_idx[char]] for char in output_string]
             output_grid_entry = tuple(output_grid_entry)
 
             # TODO: Do we need a reduce node? Can we use a single einsum? Can we use a binary op?

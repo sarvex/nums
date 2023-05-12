@@ -263,7 +263,12 @@ def cov(
     Note that element :math:`C_{0,1}`, which shows the correlation between
     :math:`x_0` and :math:`x_1`, is negative.
     """
-    if not (y is None and ddof is None and fweights is None and aweights is None):
+    if (
+        y is not None
+        or ddof is not None
+        or fweights is not None
+        or aweights is not None
+    ):
         raise NotImplementedError("y, ddof, fweights, and aweights are not supported.")
     if len(m.shape) != 2:
         raise NotImplementedError("Only 2-dimensional arrays are supported.")

@@ -55,7 +55,7 @@ def test_array_rwd():
     conn.create_bucket(Bucket="darrays")
 
     X: np.ndarray = np.random.random(3)
-    stored_X = StoredArrayS3("darrays/%s_X" % "__test__")
+    stored_X = StoredArrayS3('darrays/__test___X')
     stored_X.put_grid(
         ArrayGrid(shape=X.shape, block_shape=X.shape, dtype=np.float64.__name__)
     )

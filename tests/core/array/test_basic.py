@@ -41,9 +41,7 @@ def test_device_hashing(app_inst: ArrayApplication):
     assert app_inst is not None
     d1 = Device(0, "node:localhost1", "cpu", 0)
     d2 = Device(1, "node:localhost2", "cpu", 0)
-    x = {}
-    x[d1] = "one"
-    x[d2] = "two"
+    x = {d1: "one", d2: "two"}
     assert x[d1] == "one"
     assert x[d2] == "two"
 
@@ -208,7 +206,7 @@ def test_compute_block_shape(app_inst: ArrayApplication):
     cores_per_node = 64
     # Tall-skinny.
     for size in [64, 128, 256, 512, 1024]:
-        size_str = "%sGB" % size
+        size_str = f"{size}GB"
         num_nodes = size // 64
         cluster_shape = (16, 1)
         shape, expected_block_shape, expected_grid_shape = ideal_tall_skinny_shapes(
@@ -220,17 +218,17 @@ def test_compute_block_shape(app_inst: ArrayApplication):
         grid: ArrayGrid = ArrayGrid(shape, block_shape, dtype.__name__)
         print(
             "tall-skinny",
-            "cluster_shape=%s" % str(cluster_shape),
-            "grid_shape=%s" % str(expected_grid_shape),
-            "size=%s" % size_str,
-            "bytes computed=%s" % (grid.nbytes() / 10**9),
+            f"cluster_shape={cluster_shape}",
+            f"grid_shape={str(expected_grid_shape)}",
+            f"size={size_str}",
+            f"bytes computed={grid.nbytes() / 10**9}",
         )
         assert expected_grid_shape == grid.grid_shape
         assert expected_block_shape == block_shape
 
     # Square.
     for size in [4, 16, 64, 256, 1024]:
-        size_str = "%sGB" % size
+        size_str = f"{size}GB"
         num_nodes = 1 if size < 64 else size // 64
         cluster_shape = int(np.sqrt(num_nodes)), int(np.sqrt(num_nodes))
         shape, expected_block_shape, expected_grid_shape = ideal_square_shapes(
@@ -242,19 +240,17 @@ def test_compute_block_shape(app_inst: ArrayApplication):
         grid: ArrayGrid = ArrayGrid(shape, block_shape, dtype.__name__)
         print(
             "square",
-            "cluster_shape=%s" % str(cluster_shape),
-            "grid_shape=%s" % str(expected_grid_shape),
-            "size=%s" % size_str,
-            "bytes computed=%s" % (grid.nbytes() / 10**9),
+            f"cluster_shape={cluster_shape}",
+            f"grid_shape={str(expected_grid_shape)}",
+            f"size={size_str}",
+            f"bytes computed={grid.nbytes() / 10**9}",
         )
-        assert expected_grid_shape == grid.grid_shape, "%s != %s" % (
-            expected_grid_shape,
-            grid.grid_shape,
-        )
-        assert expected_block_shape == block_shape, "%s != %s" % (
-            expected_block_shape,
-            block_shape,
-        )
+        assert (
+            expected_grid_shape == grid.grid_shape
+        ), f"{expected_grid_shape} != {grid.grid_shape}"
+        assert (
+            expected_block_shape == block_shape
+        ), f"{expected_block_shape} != {block_shape}"
 
 
 if __name__ == "__main__":

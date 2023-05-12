@@ -80,29 +80,7 @@ def create():
 
     # Initialize kernel interface and backend.
     backend_name = settings.backend_name
-    if backend_name == "serial":
-        backend: Backend = SerialBackend(num_cpus)
-    elif backend_name == "ray":
-        use_head = settings.use_head
-        num_devices = int(np.product(cluster_shape))
-        backend: Backend = RayBackend(
-            address=settings.address,
-            use_head=use_head,
-            num_nodes=num_devices,
-            num_cpus=num_cpus,
-        )
-    elif backend_name == "mpi":
-        backend: Backend = MPIBackend()
-    elif backend_name == "ray-scheduler":
-        use_head = settings.use_head
-        num_devices = int(np.product(cluster_shape))
-        backend: Backend = RayBackendStockScheduler(
-            address=settings.address,
-            use_head=use_head,
-            num_nodes=num_devices,
-            num_cpus=num_cpus,
-        )
-    elif backend_name == "dask":
+    if backend_name == "dask":
         # pylint: disable=import-outside-toplevel
         from nums.experimental.nums_dask.dask_backend import DaskBackend
 
@@ -124,8 +102,30 @@ def create():
         backend: Backend = DaskBackendStockScheduler(
             address=settings.address, num_devices=num_devices, num_cpus=num_cpus
         )
+    elif backend_name == "mpi":
+        backend: Backend = MPIBackend()
+    elif backend_name == "ray":
+        use_head = settings.use_head
+        num_devices = int(np.product(cluster_shape))
+        backend: Backend = RayBackend(
+            address=settings.address,
+            use_head=use_head,
+            num_nodes=num_devices,
+            num_cpus=num_cpus,
+        )
+    elif backend_name == "ray-scheduler":
+        use_head = settings.use_head
+        num_devices = int(np.product(cluster_shape))
+        backend: Backend = RayBackendStockScheduler(
+            address=settings.address,
+            use_head=use_head,
+            num_nodes=num_devices,
+            num_cpus=num_cpus,
+        )
+    elif backend_name == "serial":
+        backend: Backend = SerialBackend(num_cpus)
     else:
-        raise Exception("Unexpected backend name %s" % settings.backend_name)
+        raise Exception(f"Unexpected backend name {settings.backend_name}")
     backend.init()
 
     kernel_module = {"numpy": numpy_kernel}[settings.kernel_name]
@@ -139,7 +139,7 @@ def create():
             cluster_shape, "cpu", backend.devices()
         )
     else:
-        raise Exception("Unexpected device grid name %s" % settings.device_grid_name)
+        raise Exception(f"Unexpected device grid name {settings.device_grid_name}")
 
     km = KernelManager.create(backend, kernel_module, device_grid)
     fs = FileSystem(km)

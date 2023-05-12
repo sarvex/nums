@@ -100,10 +100,8 @@ def get_file_size(fname):
 
 
 def get_char_encoding(fname):
-    # Compute the number of bytes used to encode a character for given file.
-    fh = open(fname, "rt", encoding="utf-8")
-    enc: str = fh.encoding
-    fh.close()
+    with open(fname, "rt", encoding="utf-8") as fh:
+        enc: str = fh.encoding
     if enc.lower().startswith("utf"):
         bits_per_char = int(enc.split("-")[1])
     elif enc.lower() == "ascii":
@@ -111,68 +109,63 @@ def get_char_encoding(fname):
     else:
         raise Exception("Unsupported encoding.")
     assert np.allclose(float(bits_per_char // 8), (bits_per_char / 8))
-    bytes_per_char = bits_per_char // 8
-    return bytes_per_char
+    return bits_per_char // 8
 
 
 def get_np_txt_info(fname, comments: str, delimiter: str):
     bytes_per_char = get_char_encoding(fname)
 
-    # Test encoding and extract various other details.
-    fh = open(fname, "rt", encoding="utf-8")
+    with open(fname, "rt", encoding="utf-8") as fh:
+        num_test_rows = 3
+        rows_a: List[str] = []
+        bytes_per_row = None
+        for row in fh:
+            if row.startswith(comments):
+                continue
+            if bytes_per_row is None:
+                bytes_per_row = len(row) * bytes_per_char
+            assert len(row) * bytes_per_char == bytes_per_row
+            rows_a.append(row)
+            if len(rows_a) == num_test_rows:
+                break
 
-    num_test_rows = 3
-    rows_a: List[str] = []
-    bytes_per_row = None
-    for row in fh:
-        if row.startswith(comments):
-            continue
-        if bytes_per_row is None:
-            bytes_per_row = len(row) * bytes_per_char
-        assert len(row) * bytes_per_char == bytes_per_row
-        rows_a.append(row)
-        if len(rows_a) == num_test_rows:
+        rows_b: List[str] = []
+        fh.seek(0)
+        for row in fh:
+            if row.startswith(comments):
+                continue
+            rows_b.append(row)
             break
+        while len(rows_b) < num_test_rows:
+            rows_b.append(fh.read(bytes_per_row))
 
-    rows_b: List[str] = []
-    fh.seek(0)
-    for row in fh:
-        if row.startswith(comments):
-            continue
-        rows_b.append(row)
-        break
-    while len(rows_b) < num_test_rows:
-        rows_b.append(fh.read(bytes_per_row))
-
-    bytes_per_col = None
-    num_cols = None
-    for i in range(len(rows_a)):
-        assert rows_a[i] == rows_b[i]
-        row_a_str = rows_a[i].strip("\n").split(delimiter)
-        row_b_str = rows_b[i].strip("\n").split(delimiter)
-        assert len(row_a_str) == len(row_b_str)
-        if num_cols is None:
-            num_cols = len(row_a_str)
-        for j in range(len(row_a_str)):
-            if bytes_per_col is None:
-                bytes_per_col = len(row_a_str[j])
-            assert row_a_str[j] == row_b_str[j]
-        row_a = list(map(float, row_a_str))
-        row_b = list(map(float, row_b_str))
-        assert np.allclose(row_a, row_b)
-    fh.close()
+        bytes_per_col = None
+        num_cols = None
+        for i in range(len(rows_a)):
+            assert rows_a[i] == rows_b[i]
+            row_a_str = rows_a[i].strip("\n").split(delimiter)
+            row_b_str = rows_b[i].strip("\n").split(delimiter)
+            assert len(row_a_str) == len(row_b_str)
+            if num_cols is None:
+                num_cols = len(row_a_str)
+            for j in range(len(row_a_str)):
+                if bytes_per_col is None:
+                    bytes_per_col = len(row_a_str[j])
+                assert row_a_str[j] == row_b_str[j]
+            row_a = list(map(float, row_a_str))
+            row_b = list(map(float, row_b_str))
+            assert np.allclose(row_a, row_b)
     return bytes_per_char, bytes_per_row, bytes_per_col, num_cols
 
 
 def get_np_comments(fname, comments):
-    fh = open(fname, "rt", encoding="utf-8")
-    comment_lines = []
-    trailing_newlines = 0
-    for row in fh:
-        if row.startswith(comments):
-            comment_lines.append(row)
-        break
-    fh.close()
+    with open(fname, "rt", encoding="utf-8") as fh:
+        comment_lines = []
+        trailing_newlines = 0
+        for row in fh:
+            if row.startswith(comments):
+                comment_lines.append(row)
+            break
     for row in reverse_readline(fname):
         if row.startswith(comments):
             comment_lines.append(row)

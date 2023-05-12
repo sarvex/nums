@@ -65,10 +65,11 @@ def test_blockarray_perm(nps_app_inst):
     rs = nps.random.RandomState(1337)
     np_arr_shuffle: BlockArray = rs.permutation(arr).get()
     for i in range(shape[0]):
-        num_found = 0
-        for j in range(shape[0]):
-            if np.allclose(np_arr[i], np_arr_shuffle[j]):
-                num_found += 1
+        num_found = sum(
+            1
+            for j in range(shape[0])
+            if np.allclose(np_arr[i], np_arr_shuffle[j])
+        )
         assert num_found == 1
 
 

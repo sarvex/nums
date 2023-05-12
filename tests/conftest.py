@@ -140,7 +140,7 @@ def get_app(backend_name, device_grid_name="cyclic"):
         backend.init()
         cluster_shape = (len(backend.devices()), 1)
     else:
-        raise Exception("Unexpected backend name %s" % backend_name)
+        raise Exception(f"Unexpected backend name {backend_name}")
 
     if device_grid_name == "cyclic":
         device_grid: DeviceGrid = CyclicDeviceGrid(
@@ -151,7 +151,7 @@ def get_app(backend_name, device_grid_name="cyclic"):
             cluster_shape, "cpu", backend.devices()
         )
     else:
-        raise Exception("Unexpected device grid name %s" % device_grid_name)
+        raise Exception(f"Unexpected device grid name {device_grid_name}")
 
     km = KernelManager.create(backend, numpy_kernel, device_grid)
     fs = FileSystem(km)

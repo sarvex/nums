@@ -70,9 +70,6 @@ def ufunc_op_signatures():
             ]:
                 # This is a bop.
                 bops.append((name, args))
-            else:
-                pass
-                # print(name, op_name, args)
         except Exception as _:
             pass
             # print("FAILED", name)
@@ -96,7 +93,7 @@ def update_doc_string(doc_string):
     for nums_func in nums_funcs:
         doc_string = doc_string.replace(
             nums_func,
-            '>>> eval("np.around(' + nums_func[4:].rstrip() + '.get(), 5)")\n',
+            f'>>> eval("np.around({nums_func[4:].rstrip()}' + '.get(), 5)")\n',
         )
     numbers = list(set(re.findall(r"-?[0-9]\d{0,9}\.\d+", doc_string)))
     for num in numbers:

@@ -78,10 +78,9 @@ class LBFGS:
     def get_H(self):
         if self.k == 0:
             return self.identity
-        else:
-            mem: LBFGSMemory = self.memory[-1]
-            assert mem.k == self.k - 1
-            return mem.gamma * self.identity
+        mem: LBFGSMemory = self.memory[-1]
+        assert mem.k == self.k - 1
+        return mem.gamma * self.identity
 
     def get_p(self, H, g):
         q = g
@@ -113,10 +112,10 @@ class LBFGS:
         g = self.model.gradient(X, y, self.model.forward(X, theta), theta)
         next_g = None
         next_theta = None
+        init_alpha = 1.0
         while self.k < self.max_iter:
             H = self.get_H()
             p = -self.get_p(H, g)
-            init_alpha = 1.0
             alpha = self.ls.execute(
                 X,
                 y,
@@ -159,5 +158,3 @@ class LBFGS:
         return self.app.max(self.app.abs(g)) <= self.thresh
 
 
-if __name__ == "__main__":
-    pass

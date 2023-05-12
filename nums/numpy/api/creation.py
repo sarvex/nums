@@ -211,9 +211,8 @@ def array(object, dtype=None, copy=True, order="K", ndmin=0, subok=False) -> Blo
     if isinstance(object, BlockArray):
         if copy:
             object = object.copy()
-        if dtype is not None:
-            if dtype is not object.dtype:
-                object = object.astype(dtype)
+        if dtype is not None and dtype is not object.dtype:
+            object = object.astype(dtype)
         return object
     result = np.array(
         object, dtype=dtype, copy=copy, order=order, ndmin=ndmin, subok=subok
@@ -1179,10 +1178,6 @@ def asarray(a, dtype=None, order=None, *, like=None):
 
     if type(a) is BlockArray:  # pylint: disable=unidiomatic-typecheck
         is_matching_dtype = not dtype or a.dtype == dtype
-        if is_matching_dtype:
-            return a
-        else:
-            return a.astype(dtype)
-
+        return a if is_matching_dtype else a.astype(dtype)
     a = np.asarray(a, dtype=dtype)
     return array(a, dtype=a.dtype, copy=True)

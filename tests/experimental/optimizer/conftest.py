@@ -93,7 +93,7 @@ class MockMultiNodeDaskBackend(DaskBackend):
         self._node_to_worker = {}
         self._devices = []
         for node_id in range(num_nodes):
-            mock_node_addr = "mock." + node_addr
+            mock_node_addr = f"mock.{node_addr}"
             self._node_addresses.append(mock_node_addr)
             self._worker_addresses += worker_addresses
             self._node_to_worker[mock_node_addr] = {"workers": list(worker_addresses)}

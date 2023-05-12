@@ -39,15 +39,12 @@ def get_slices(size, index_multiplier=1, limit=None):
     index_multiplier = [None] + list(
         range(-size * index_multiplier, size * index_multiplier + 1)
     )
-    items = list()
-    for start, stop, step in itertools.product(index_multiplier, repeat=3):
-        if step == 0:
-            continue
-        items.append(slice(start, stop, step))
-    if limit is None:
-        return items
-    else:
-        return subsample(items, limit)
+    items = [
+        slice(start, stop, step)
+        for start, stop, step in itertools.product(index_multiplier, repeat=3)
+        if step != 0
+    ]
+    return items if limit is None else subsample(items, limit)
 
 
 def get_indices(size, limit=None):
@@ -58,13 +55,11 @@ def get_indices(size, limit=None):
 
 
 def get_arrays(size, limit=None):
-    items = []
-    for arr in itertools.product(range(size), repeat=size):
-        items.append(np.array(arr, dtype=int))
-    if limit is None:
-        return items
-    else:
-        return subsample(items, limit)
+    items = [
+        np.array(arr, dtype=int)
+        for arr in itertools.product(range(size), repeat=size)
+    ]
+    return items if limit is None else subsample(items, limit)
 
 
 def subsample(items, max_items, seed=1337):
@@ -106,7 +101,7 @@ def alt_compute_intersection(sel_a, sel_b, shape):
                 # Currently not supported (and may be impossible in general).
                 raise ValueError("Cannot compute intersection of slice and array.")
             else:
-                raise ValueError("Unexpected type %s" % type(axis_b))
+                raise ValueError(f"Unexpected type {type(axis_b)}")
             true_sel_c.append(axis_c)
         elif isinstance(axis_a, int) or isinstance(axis_b, int):
             if isinstance(axis_b, int):
@@ -116,13 +111,13 @@ def alt_compute_intersection(sel_a, sel_b, shape):
             elif isinstance(axis_b, np.ndarray):
                 axis_c = axis_a if axis_a in axis_b else slice(0, 0)
             else:
-                raise ValueError("Unexpected type %s" % type(axis_b))
+                raise ValueError(f"Unexpected type {type(axis_b)}")
             true_sel_c.append(axis_c)
         elif isinstance(axis_a, np.ndarray) and isinstance(axis_b, np.ndarray):
             axis_c = sel_a._np_array_and_array(axis_a, axis_b)
             true_sel_c.append(axis_c)
         else:
-            raise ValueError("Unexpected types %s, %s" % (type(axis_a), type(axis_b)))
+            raise ValueError(f"Unexpected types {type(axis_a)}, {type(axis_b)}")
     return tuple(true_sel_c)
 
 
@@ -395,9 +390,7 @@ def test_multiselect_intersection():
                     num_arrays_b += 1
                 if types_a[i] != types_b[i]:
                     return True
-        if num_axes_a > 1 or num_axes_b > 1:
-            return True
-        return False
+        return num_axes_a > 1 or num_axes_b > 1
 
     size = 3
     num_axes = 2

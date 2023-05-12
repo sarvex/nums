@@ -38,11 +38,7 @@ class ArrayGrid:
         for i in range(len(self.shape)):
             dim = self.shape[i]
             block_dim = block_shape[i]
-            if dim == 0:
-                # Special case of empty array.
-                axis_slices = []
-            else:
-                axis_slices = Batch(dim, block_dim).batches
+            axis_slices = [] if dim == 0 else Batch(dim, block_dim).batches
             self.grid_slices.append(axis_slices)
             self.grid_shape.append(len(axis_slices))
         self.grid_shape = tuple(self.grid_shape)
@@ -63,28 +59,28 @@ class ArrayGrid:
         return itertools.product(*map(range, self.grid_shape))
 
     def get_slice(self, grid_entry):
-        slices = []
-        for axis, slice_index in enumerate(grid_entry):
-            slices.append(slice(*self.grid_slices[axis][slice_index]))
+        slices = [
+            slice(*self.grid_slices[axis][slice_index])
+            for axis, slice_index in enumerate(grid_entry)
+        ]
         return tuple(slices)
 
     def get_slice_tuples(self, grid_entry: Tuple) -> List[Tuple[slice]]:
-        slice_tuples = []
-        for axis, slice_index in enumerate(grid_entry):
-            slice_tuples.append(tuple(self.grid_slices[axis][slice_index]))
-        return slice_tuples
+        return [
+            tuple(self.grid_slices[axis][slice_index])
+            for axis, slice_index in enumerate(grid_entry)
+        ]
 
     def get_entry_coordinates(self, grid_entry) -> Tuple[int]:
-        coordinates = []
-        for axis, slice_index in enumerate(grid_entry):
-            coordinates.append(self.grid_slices[axis][slice_index][0])
+        coordinates = [
+            self.grid_slices[axis][slice_index][0]
+            for axis, slice_index in enumerate(grid_entry)
+        ]
         return tuple(coordinates)
 
     def get_block_shape(self, grid_entry: Tuple):
         slice_tuples = self.get_slice_tuples(grid_entry)
-        block_shape = []
-        for slice_tuple in slice_tuples:
-            block_shape.append(slice_tuple[1] - slice_tuple[0])
+        block_shape = [slice_tuple[1] - slice_tuple[0] for slice_tuple in slice_tuples]
         return tuple(block_shape)
 
     def nbytes(self):
@@ -99,11 +95,10 @@ class ArrayGrid:
         elif self.dtype in (bool, np.bool_):
             dtype = np.dtype(np.bool_)
         else:
-            raise ValueError("dtype %s not supported" % str(self.dtype))
+            raise ValueError(f"dtype {str(self.dtype)} not supported")
 
         dtype_nbytes = dtype.alignment
-        nbytes = np.product(self.shape) * dtype_nbytes
-        return nbytes
+        return np.product(self.shape) * dtype_nbytes
 
 
 @dataclass(frozen=True)
@@ -221,7 +216,5 @@ class PackedDeviceGrid(DeviceGrid):
 
     def compute_cluster_entry_axis(self, axis, ge_axis_val, gs_axis_val, cs_axis_val):
         if ge_axis_val >= gs_axis_val:
-            raise ValueError(
-                "Array grid_entry is not < grid_shape along axis %s." % axis
-            )
+            raise ValueError(f"Array grid_entry is not < grid_shape along axis {axis}.")
         return int(ge_axis_val / gs_axis_val * cs_axis_val)

@@ -96,7 +96,7 @@ def test_manual(nps_app_inst):
     import nums.numpy as nps
 
     test_set = {}
-    test_set.update(get_test_set_a())
+    test_set |= get_test_set_a()
     test_set.update(get_test_set_b2f())
     test_set.update(get_test_set_g2n())
     test_set.update(get_test_set_o2z())

@@ -66,21 +66,20 @@ def test_argops(nps_app_inst):
         nps.array([-1, -2, -3, -0]),
     ]
     block_shapes = [(1,), (2,), (3,), (4,)]
-    for ba in bas:
-        for block_shape in block_shapes:
-            ba = ba.reshape(block_shape=block_shape)
-            np_arr = ba.get()
-            op_params = ["argmin", "argmax"]
-            axis_params = [None, 0]
+    for ba, block_shape in itertools.product(bas, block_shapes):
+        ba = ba.reshape(block_shape=block_shape)
+        np_arr = ba.get()
+        op_params = ["argmin", "argmax"]
+        axis_params = [None, 0]
 
-            for op, axis in itertools.product(op_params, axis_params):
-                ns_op = nps.__getattribute__(op)
-                np_op = np.__getattribute__(op)
-                np_result = np_op(np_arr, axis=axis)
-                ba_result: BlockArray = ns_op(ba, axis=axis)
-                assert ba_result.grid.grid_shape == ba_result.blocks.shape
-                assert ba_result.shape == np_result.shape
-                assert np.allclose(ba_result.get(), np_result)
+        for op, axis in itertools.product(op_params, axis_params):
+            ns_op = nps.__getattribute__(op)
+            np_op = np.__getattribute__(op)
+            np_result = np_op(np_arr, axis=axis)
+            ba_result: BlockArray = ns_op(ba, axis=axis)
+            assert ba_result.grid.grid_shape == ba_result.blocks.shape
+            assert ba_result.shape == np_result.shape
+            assert np.allclose(ba_result.get(), np_result)
 
 
 def test_average(nps_app_inst):

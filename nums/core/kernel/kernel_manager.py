@@ -64,18 +64,14 @@ class KernelManager(Kernel):
         backend_utils.check_implementation(Kernel, kernel_imp)
         if getattr(kernel_module, "RNG", None) is None:
             raise Exception(
-                "No random number generator implemented "
-                "for compute module %s" % str(kernel_module)
+                f"No random number generator implemented for compute module {str(kernel_module)}"
             )
         self.rng_cls = kernel_module.RNG
 
         # Collect implemented module functions.
         module_functions = backend_utils.extract_functions(kernel_imp)
-        # Collect function signatures.
-        function_signatures: dict = {}
         required_methods = inspect.getmembers(Kernel(), predicate=inspect.ismethod)
-        for name, func in required_methods:
-            function_signatures[name] = func
+        function_signatures: dict = dict(required_methods)
         for name, func in module_functions.items():
             self.fuseable_functions[name] = func
             func_sig = function_signatures[name]
@@ -142,10 +138,7 @@ class KernelManager(Kernel):
             device: Device = syskwargs["device"]
         else:
             raise Exception("All calls require device or grid_entry and grid_shape.")
-        if "options" in syskwargs:
-            options = syskwargs["options"]
-        else:
-            options = {}
+        options = syskwargs["options"] if "options" in syskwargs else {}
         return device, options
 
     def call(self, name: str, *args, **kwargs):
@@ -188,16 +181,14 @@ class KernelManager(Kernel):
         elif dtype in (bool, np.bool_):
             dtype = np.dtype(np.bool_)
         else:
-            raise ValueError("dtype %s not supported" % str(dtype))
+            raise ValueError(f"dtype {str(dtype)} not supported")
 
         nbytes = dtype.alignment
         size = np.product(shape) * nbytes
         # If the object is less than 100 megabytes, there's not much value in constructing
         # a block tensor.
         if size < 10**8:
-            block_shape = shape
-            return block_shape
-
+            return shape
         if len(shape) < len(cluster_shape):
             cluster_shape = cluster_shape[: len(shape)]
         elif len(shape) > len(cluster_shape):
@@ -227,10 +218,7 @@ class KernelManager(Kernel):
         grid_shape[np.argmax(shape)] += remaining
         grid_shape = np.ceil(grid_shape).astype(int)
 
-        # We use ceiling of floating block shape
-        # so that resulting grid shape is <= to what we compute above.
-        block_shape = tuple((shape_np + grid_shape - 1) // grid_shape)
-        return block_shape
+        return tuple((shape_np + grid_shape - 1) // grid_shape)
 
     def compute_block_shape(
         self,
@@ -251,12 +239,13 @@ class KernelManager(Kernel):
         )
 
     def update_block_shape_map(self, shape_dim, block_shape_dim):
-        if shape_dim in self._block_shape_map:
-            if self._block_shape_map[shape_dim] != block_shape_dim:
-                warnings.warn(
-                    "Block size differs for dimensions of size %s, "
-                    "this may cause some operations to be slower." % shape_dim
-                )
+        if (
+            shape_dim in self._block_shape_map
+            and self._block_shape_map[shape_dim] != block_shape_dim
+        ):
+            warnings.warn(
+                f"Block size differs for dimensions of size {shape_dim}, this may cause some operations to be slower."
+            )
         self._block_shape_map[shape_dim] = block_shape_dim
 
     def get_block_shape(self, shape, dtype):

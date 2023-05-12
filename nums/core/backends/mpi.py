@@ -69,9 +69,9 @@ class MPIBackend(Backend):
         self._device_to_rank[did] = self.rank
         self._devices = self.comm.allgather(did)
         self._device_to_rank = self.comm.allgather({did: self.rank})
-        self._device_to_rank = dict(
-            (key, val) for k in self._device_to_rank for key, val in k.items()
-        )
+        self._device_to_rank = {
+            key: val for k in self._device_to_rank for key, val in k.items()
+        }
 
     def shutdown(self):
         pass
@@ -86,14 +86,10 @@ class MPIBackend(Backend):
             return MPIRemoteObj(dest_rank)
 
     def get(self, object_ids: Union[Any, List]):
-        resolved_object_ids = []
         if not isinstance(object_ids, (MPIRemoteObj, MPILocalObj)):
+            resolved_object_ids = []
             for obj in object_ids:
-                if isinstance(obj, MPIRemoteObj):
-                    dest_rank = obj.rank
-                # This should be true for just one rank which has the data.
-                else:
-                    dest_rank = self.rank
+                dest_rank = obj.rank if isinstance(obj, MPIRemoteObj) else self.rank
                 # TODO: see if all-2-all might be more efficient.
                 obj = self.comm.bcast(obj, root=dest_rank)
                 obj_value = obj.value
@@ -102,11 +98,7 @@ class MPIBackend(Backend):
             return resolved_object_ids
         else:
             obj = object_ids
-            if isinstance(obj, MPIRemoteObj):
-                dest_rank = obj.rank
-            # This should be true for just one rank which has the data.
-            else:
-                dest_rank = self.rank
+            dest_rank = obj.rank if isinstance(obj, MPIRemoteObj) else self.rank
             # TODO: see if all-2-all might be more efficient.
             obj = self.comm.bcast(obj, root=dest_rank)
             assert not isinstance(obj.value, (MPILocalObj, MPIRemoteObj))
@@ -144,25 +136,22 @@ class MPIBackend(Backend):
         resolved_args = self._resolve_args(args, dest_rank)
         resolved_kwargs = self._resolve_kwargs(kwargs, dest_rank)
         func, nout = self._parse_call(name, options)
-        if dest_rank == self.rank:
-            result = func(*resolved_args, **resolved_kwargs)
-            if nout > 1:
-                return tuple([MPILocalObj(result[i]) for i in range(nout)])
-            else:
-                return MPILocalObj(result)
+        if dest_rank != self.rank:
+            return (
+                tuple(repeat(MPIRemoteObj(dest_rank), nout))
+                if nout > 1
+                else MPIRemoteObj(dest_rank)
+            )
+        result = func(*resolved_args, **resolved_kwargs)
+        if nout > 1:
+            return tuple(MPILocalObj(result[i]) for i in range(nout))
         else:
-            if nout > 1:
-                return tuple(repeat(MPIRemoteObj(dest_rank), nout))
-            else:
-                return MPIRemoteObj(dest_rank)
+            return MPILocalObj(result)
 
     def _resolve_kwargs(self, kwargs: dict, device_rank):
         # Resolve dependencies: iterate over kwargs and figure out which ones need fetching.
         assert isinstance(kwargs, dict), str(type(kwargs))
-        resolved_args = {}
-        for k, v in kwargs.items():
-            resolved_args[k] = self._resolve_object(v, device_rank)
-        return resolved_args
+        return {k: self._resolve_object(v, device_rank) for k, v in kwargs.items()}
 
     def _resolve_args(self, args: Union[list, tuple], device_rank):
         # Resolve dependencies: iterate over args and figure out which ones need fetching.
@@ -182,9 +171,7 @@ class MPIBackend(Backend):
                 return obj.value
             # If the object is not local then execute a receive.
             sender_rank = obj.rank
-            # TODO: Try Isend and Irecv and have a switch for sync and async.
-            arg_value = self.comm.recv(source=sender_rank)
-            return arg_value
+            return self.comm.recv(source=sender_rank)
         elif isinstance(obj, MPILocalObj):
             # The obj is stored on this rank, so send it to the device on which the op will be
             # executed.
@@ -215,14 +202,12 @@ class MPIBackend(Backend):
         resolved_kwargs = self._resolve_kwargs(kwargs, dest_rank)
         if dest_rank == self.rank:
             actor_obj = actor(*resolved_args, **resolved_kwargs)
-            actor_id = id(actor_obj)
-            self._actor_to_rank[actor_id] = dest_rank
-            return actor_obj
         else:
             actor_obj = MPIRemoteObj(dest_rank)
-            actor_id = id(actor_obj)
-            self._actor_to_rank[actor_id] = dest_rank
-            return actor_obj
+
+        actor_id = id(actor_obj)
+        self._actor_to_rank[actor_id] = dest_rank
+        return actor_obj
 
     def call_actor_method(self, actor, method: str, *args, **kwargs):
         dest_rank = self._actor_to_rank[id(actor)]

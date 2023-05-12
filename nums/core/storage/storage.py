@@ -38,10 +38,10 @@ class StoredArray:
 
     def get_key(self, grid_entry: Tuple):
         index_str = "_".join(map(str, grid_entry))
-        return "%s_%s" % (self.array_name, index_str)
+        return f"{self.array_name}_{index_str}"
 
     def get_meta_key(self):
-        return "%s_meta" % self.array_name
+        return f"{self.array_name}_meta"
 
     def put(self, grid_entry: Tuple, block: np.ndarray) -> Any:
         raise NotImplementedError()
@@ -90,19 +90,18 @@ class StoredArrayS3(StoredArray):
         self.client = boto3.client("s3")
         super(StoredArrayS3, self).__init__(filename, grid)
         if self.filename[0] == "/":
-            raise Exception("Leading / in s3 filename: %s" % filename)
+            raise Exception(f"Leading / in s3 filename: {filename}")
         fileparts = self.filename.split("/")
         self.container_name = fileparts[0]
         self.array_name = "/".join(fileparts[1:])
 
     def put(self, grid_entry: Tuple, block: np.ndarray) -> Any:
         block_bytes = block.tobytes()
-        response = self.client.put_object(
+        return self.client.put_object(
             Bucket=self.container_name,
             Key=self.get_key(grid_entry),
             Body=block_bytes,
         )
-        return response
 
     def get(self, grid_entry: Tuple) -> np.ndarray:
         try:
@@ -133,33 +132,30 @@ class StoredArrayS3(StoredArray):
 
     def delete(self, grid_entry: Tuple) -> Any:
         objects = [{"Key": self.get_key(grid_entry)}]
-        response = self.client.delete_objects(
+        return self.client.delete_objects(
             Bucket=self.container_name,
             Delete={
                 "Objects": objects,
             },
         )
-        return response
 
     def delete_grid(self) -> Any:
         objects = [{"Key": self.get_meta_key()}]
-        response = self.client.delete_objects(
+        return self.client.delete_objects(
             Bucket=self.container_name,
             Delete={
                 "Objects": objects,
             },
         )
-        return response
 
     def put_grid(self, array_grid: ArrayGrid) -> Any:
         self.grid = array_grid
         body = pickle.dumps(self.grid.to_meta())
-        response = self.client.put_object(
+        return self.client.put_object(
             Bucket=self.container_name,
             Key=self.get_meta_key(),
             Body=body,
         )
-        return response
 
     def get_grid(self) -> ArrayGrid:
         try:
@@ -172,17 +168,16 @@ class StoredArrayS3(StoredArray):
             return None
 
     def del_array(self):
-        objects = []
         grid_entry_iterator = self.grid.get_entry_iterator()
-        for grid_entry in grid_entry_iterator:
-            objects.append({"Key": self.get_key(grid_entry)})
-        response = self.client.delete_objects(
+        objects = [
+            {"Key": self.get_key(grid_entry)} for grid_entry in grid_entry_iterator
+        ]
+        return self.client.delete_objects(
             Bucket=self.container_name,
             Delete={
                 "Objects": objects,
             },
         )
-        return response
 
 
 class BimodalGaussian:
@@ -203,7 +198,7 @@ class BimodalGaussian:
         self.sigma2 = self.to_arr(sigma2, 1)
 
     def to_arr(self, sigma, num_axes):
-        assert num_axes == 1 or num_axes == 2
+        assert num_axes in [1, 2]
         sigma_arr = sigma
         if not isinstance(sigma, np.ndarray):
             # Assume it's not diag.

@@ -149,10 +149,7 @@ def get_parts_fs(filename: AnyStr, grid_meta: Dict):
     if contains_all:
         return "all"
     else:
-        if len(results) == 0:
-            return None
-        else:
-            return np.array(results, dtype=np.uint32)
+        return None if not results else np.array(results, dtype=np.uint32)
 
 
 def write_block_fs(block: Any, filename: AnyStr, grid_entry: Tuple):
@@ -230,9 +227,7 @@ def read_csv_block(filename, file_start, file_end, dtype, delimiter, has_header)
 
         def floatconv(x):
             x.lower()
-            if "0x" in x:
-                return float.fromhex(x)
-            return float(x)
+            return float.fromhex(x) if "0x" in x else float(x)
 
         if issubclass(_dtype, np.bool_):
             return lambda x: bool(int(x))
@@ -428,7 +423,7 @@ class FileSystem:
             result = self.km.get(oid)
             if result is not None:
                 return result
-        raise FileNotFoundError("Unable to load meta data for file %s" % filename)
+        raise FileNotFoundError(f"Unable to load meta data for file {filename}")
 
     def repartition(self, filename: AnyStr, grid_meta: Dict, syskwargs):
         """
@@ -454,12 +449,9 @@ class FileSystem:
             result_oids.append(oid)
         file_results = self.km.backend.get(result_oids)
 
-        # Check if all the nodes have all the data.
-        all_has_all = True
-        for result in file_results:
-            if isinstance(result, str) and result != "all":
-                all_has_all = False
-                break
+        all_has_all = not any(
+            isinstance(result, str) and result != "all" for result in file_results
+        )
         if all_has_all:
             # This is likely a single machine or virtual FS.
             # Load via device grid ordering.
@@ -490,8 +482,9 @@ class FileSystem:
         aligned = True
         for grid_entry in grid.get_entry_iterator():
             device = self.km.device_grid.get_device(grid_entry, grid.grid_shape)
-            if not (
-                device in grid_entry_sets and grid_entry in grid_entry_sets[device]
+            if (
+                device not in grid_entry_sets
+                or grid_entry not in grid_entry_sets[device]
             ):
                 aligned = False
                 break
@@ -514,16 +507,14 @@ class FileSystem:
         grid_entry_to_devices = {}
         for grid_entry in grid.get_entry_iterator():
             grid_entry_to_devices[grid_entry] = []
-            for device in grid_entry_sets:
-                if grid_entry in grid_entry_sets[device]:
+            for device, value in grid_entry_sets.items():
+                if grid_entry in value:
                     grid_entry_to_devices[grid_entry].append(device)
             if len(grid_entry_to_devices[grid_entry]) == 0:
-                raise Exception("Unable to find all blocks for %s." % filename)
+                raise Exception(f"Unable to find all blocks for {filename}.")
 
         warnings.warn(
-            ("Loading %s with no data layout guarantee. " % filename)
-            + "This may negatively impact performance. "
-            + "To fix this, rewrite this block array to disk."
+            f"Loading {filename} with no data layout guarantee. This may negatively impact performance. To fix this, rewrite this block array to disk."
         )
         ba: BlockArray = BlockArray(grid, self.km)
         for grid_entry in grid_entry_to_devices:

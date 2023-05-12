@@ -56,7 +56,7 @@ class Block:
         self._device = None
 
     def __repr__(self):
-        return "Block(" + str(self.oid) + ")"
+        return f"Block({str(self.oid)})"
 
     def size(self):
         return np.product(self.shape)
@@ -75,14 +75,10 @@ class Block:
         return block
 
     def true_grid_entry(self):
-        if self.transposed:
-            return tuple(reversed(self.grid_entry))
-        return self.grid_entry
+        return tuple(reversed(self.grid_entry)) if self.transposed else self.grid_entry
 
     def true_grid_shape(self):
-        if self.transposed:
-            return tuple(reversed(self.grid_shape))
-        return self.grid_shape
+        return tuple(reversed(self.grid_shape)) if self.transposed else self.grid_shape
 
     def device(self):
         if self._device is not None:
@@ -347,7 +343,7 @@ class BlockArrayBase:
                 )
 
     def __repr__(self):
-        return "BlockArray(" + str(self.blocks) + ")"
+        return f"BlockArray({str(self.blocks)})"
 
     def get(self) -> np.ndarray:
         result: np.ndarray = np.zeros(shape=self.grid.shape, dtype=self.grid.dtype)

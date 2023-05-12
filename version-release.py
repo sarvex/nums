@@ -74,17 +74,17 @@ def execute():
         lines = err.split("\n")
         print(lines)
         for line in lines:
-            if not ("warn" in line or "UserWarning" in line or line == ""):
+            if "warn" not in line and "UserWarning" not in line and line != "":
                 raise Exception(err)
-    s = " build %s" % __version__
+    s = f" build {__version__}"
     print("-" * (50 - len(s)) + s)
     print(out)
     print("-" * 50)
 
     repo_name = input(
-        "Release %s to pypi or test.pypi (pypi/test.pypi)? " % __version__
+        f"Release {__version__} to pypi or test.pypi (pypi/test.pypi)? "
     )
-    assert repo_name in ("pypi", "test.pypi"), "repo_name=%s" % repo_name
+    assert repo_name in ("pypi", "test.pypi"), f"repo_name={repo_name}"
 
     release_cmd = ["twine", "upload"]
     username = input("Username? ")
@@ -96,10 +96,10 @@ def execute():
     elif repo_name == "test.pypi":
         release_cmd += ["-r", "testpypi", "dist/*"]
     else:
-        raise Exception("Unknown repository %s" % repo_name)
+        raise Exception(f"Unknown repository {repo_name}")
 
     out, err = communicate(*release_cmd)
-    s = " release %s" % __version__
+    s = f" release {__version__}"
     print("-" * (50 - len(s)) + s)
     print("out", out)
     print("err", err)

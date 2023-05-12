@@ -678,8 +678,7 @@ def split(ary: BlockArray, indices_or_sections, axis=0):
     # Splits into N equal arrays, and raise if this is not possible.
     if dim_total % indices_or_sections != 0:
         raise ValueError(
-            "ary axis %s cannot be split into %s equal arrays."
-            % (axis, indices_or_sections)
+            f"ary axis {axis} cannot be split into {indices_or_sections} equal arrays."
         )
     dim_partial = dim_total // indices_or_sections
     results = []

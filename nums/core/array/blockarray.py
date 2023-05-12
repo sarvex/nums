@@ -50,7 +50,7 @@ class BlockArray(BlockArrayBase):
     @classmethod
     def from_scalar(cls, val, km):
         if not array_utils.is_scalar(val):
-            raise ValueError("%s is not a scalar." % val)
+            raise ValueError(f"{val} is not a scalar.")
         return BlockArray.from_np(np.array(val), block_shape=(), copy=False, km=km)
 
     @classmethod
@@ -84,7 +84,7 @@ class BlockArray(BlockArrayBase):
 
     @classmethod
     def from_blocks(cls, arr: np.ndarray, result_shape, km):
-        sample_idx = tuple(0 for dim in arr.shape)
+        sample_idx = tuple(0 for _ in arr.shape)
         if isinstance(arr, Block):
             sample_block = arr
             result_shape = ()
@@ -100,10 +100,7 @@ class BlockArray(BlockArrayBase):
         assert arr.shape == result_grid.grid_shape
         result = BlockArray(result_grid, km)
         for grid_entry in result_grid.get_entry_iterator():
-            if isinstance(arr, Block):
-                block: Block = arr
-            else:
-                block: Block = arr[grid_entry]
+            block: Block = arr if isinstance(arr, Block) else arr[grid_entry]
             result.blocks[grid_entry] = block
         return result
 
@@ -155,7 +152,7 @@ class BlockArray(BlockArrayBase):
         block_shape = kwargs.get("block_shape", None)
         if array_utils.is_int(shape):
             shape = (shape,)
-        elif len(shape) == 0:
+        elif not shape:
             shape = self.shape
         elif isinstance(shape[0], (tuple, list)):
             assert len(shape) == 1
@@ -219,8 +216,7 @@ class BlockArray(BlockArrayBase):
             rarr_src[grid_entry] = self.blocks[grid_entry].swapaxes(axis1, axis2)
         rarr_src = rarr_src.swapaxes(axis1, axis2)
 
-        rarr_swap = BlockArray(grid_swap, self.km, rarr_src)
-        return rarr_swap
+        return BlockArray(grid_swap, self.km, rarr_src)
 
     def transpose(self, defer=False, redistribute=False):
         """
@@ -248,7 +244,7 @@ class BlockArray(BlockArrayBase):
         return rarrT
 
     def __getattr__(self, item):
-        if item == "__array_priority__" or item == "__array_struct__":
+        if item in ["__array_priority__", "__array_struct__"]:
             # This is triggered by a numpy array on the LHS.
             raise TypeError("Unexpected conversion attempt from BlockArray to ndarray.")
         elif item == "ndim":
@@ -259,17 +255,11 @@ class BlockArray(BlockArrayBase):
             raise NotImplementedError(item)
 
     def _preprocess_subscript(self, item):
-        if not isinstance(item, tuple):
-            ss = (item,)
-        else:
-            ss = item
+        ss = (item, ) if not isinstance(item, tuple) else item
         # We need to fetch any block arrays.
         tmp = []
         for entry in ss:
-            if isinstance(entry, BlockArray):
-                val = entry.get()
-            else:
-                val = entry
+            val = entry.get() if isinstance(entry, BlockArray) else entry
             if isinstance(val, list):
                 val = np.array(val)
             if isinstance(val, np.ndarray):
@@ -298,9 +288,9 @@ class BlockArray(BlockArrayBase):
                 is_handled_advanced = True
                 array_encountered = True
                 axis = i
-                if not (np.all(0 <= entry) and np.all(entry < self.shape[axis])):
+                if not (np.all(entry >= 0) and np.all(entry < self.shape[axis])):
                     raise IndexError(
-                        "Advanced indexing array along axis %s is out of bounds." % axis
+                        f"Advanced indexing array along axis {axis} is out of bounds."
                     )
             else:
                 if array_encountered:
@@ -339,21 +329,19 @@ class BlockArray(BlockArrayBase):
         shape = []
         block_shape = []
         for i in range(len(self.shape)):
-            if i == axis:
+            if (
+                i != axis
+                and i < len(ss)
+                and isinstance(ss[i], slice)
+                or i != axis
+                and i >= len(ss)
+            ):
+                shape.append(self.shape[i])
+                block_shape.append(self.block_shape[i])
+            elif i == axis:
                 dst_axis = len(shape)
                 shape.append(array.shape[0])
                 block_shape.append(block_size)
-            elif i < len(ss):
-                if isinstance(ss[i], slice):
-                    shape.append(self.shape[i])
-                    block_shape.append(self.block_shape[i])
-                else:
-                    # It's an index. We drop the indices.
-                    continue
-            else:
-                shape.append(self.shape[i])
-                block_shape.append(self.block_shape[i])
-
         dst_arr = BlockArray(
             ArrayGrid(
                 shape=tuple(shape),
@@ -394,9 +382,10 @@ class BlockArray(BlockArrayBase):
                     break
             if skip:
                 continue
-            for curr_axis in range(len(np_ss), len(src_grid_entry)):
-                dst_grid_entry_list.append(src_grid_entry[curr_axis])
-
+            dst_grid_entry_list.extend(
+                src_grid_entry[curr_axis]
+                for curr_axis in range(len(np_ss), len(src_grid_entry))
+            )
             for j in range(dst_arr.grid.grid_shape[dst_axis]):
                 dst_grid_entry_list[dst_axis] = j
                 dst_grid_entry = tuple(dst_grid_entry_list)
@@ -458,15 +447,10 @@ class BlockArray(BlockArrayBase):
             for i in range(len(self.shape)):
                 if i == axis:
                     assert len(ss[i]) == value.shape[0]
-                elif i < axis:
-                    # Nothing to check here.
-                    # These entries are : or integer.
-                    pass
-                else:
-                    if i < len(ss):
-                        if not isinstance(ss[i], slice):
-                            # ss[i] is an integer.
-                            continue
+                elif i >= axis:
+                    if i < len(ss) and not isinstance(ss[i], slice):
+                        # ss[i] is an integer.
+                        continue
                     # If we're here, then the rest of the subscript operator
                     # will resolve to :, which is not broadcastable.
                     raise ValueError(
@@ -495,12 +479,13 @@ class BlockArray(BlockArrayBase):
                 # TODO: This message occurs on X[idx[:n]] = X[idx[n:]] + 0.5,
                 #  even when n is a multiple of block_shape[0].
                 warnings.warn(
-                    ("Assigned value block shape %s " % str(value.block_shape))
-                    + (
-                        "does not match block shape %s of assignee. "
-                        % str(new_block_shape)
+                    (
+                        (
+                            f"Assigned value block shape {str(value.block_shape)} "
+                            + f"does not match block shape {new_block_shape} of assignee. "
+                        )
+                        + "Applying reshape to assigned value."
                     )
-                    + "Applying reshape to assigned value."
                 )
                 value = value.reshape(block_shape=new_block_shape)
 
@@ -551,7 +536,33 @@ class BlockArray(BlockArrayBase):
             if skip:
                 continue
 
-            if mode == "scalar":
+            if mode == "multi-dim":
+                for j in range(src_grid_shape[axis]):
+                    # Apply sel from each block along axis of src_arr.
+                    # e.g. for 2 dim array, we fix the column blocks
+                    # given by dst_grid_entry, and iterate over the rows.
+                    src_grid_entry = tuple(
+                        list(dst_grid_entry[:axis])
+                        + [j]
+                        + list(dst_grid_entry[axis + 1 :])
+                    )
+                    src_block: Block = src_arr.blocks[src_grid_entry]
+                    src_coord: tuple = src_arr.grid.get_entry_coordinates(
+                        src_grid_entry
+                    )
+                    dst_block.oid = self.km.advanced_assign_block_along_axis(
+                        dst_block.oid,
+                        src_block.oid,
+                        ss,
+                        axis,
+                        dst_coord,
+                        src_coord,
+                        syskwargs={
+                            "grid_entry": dst_grid_entry,
+                            "grid_shape": dst_arr.grid.grid_shape,
+                        },
+                    )
+            elif mode == "scalar":
                 src_block: Block = src_arr.blocks.item()
                 src_coord: tuple = src_arr.grid.get_entry_coordinates(
                     src_block.grid_entry
@@ -586,32 +597,6 @@ class BlockArray(BlockArrayBase):
                             "grid_shape": dst_arr.grid.grid_shape,
                         },
                     )
-            elif mode == "multi-dim":
-                for j in range(src_grid_shape[axis]):
-                    # Apply sel from each block along axis of src_arr.
-                    # e.g. for 2 dim array, we fix the column blocks
-                    # given by dst_grid_entry, and iterate over the rows.
-                    src_grid_entry = tuple(
-                        list(dst_grid_entry[:axis])
-                        + [j]
-                        + list(dst_grid_entry[axis + 1 :])
-                    )
-                    src_block: Block = src_arr.blocks[src_grid_entry]
-                    src_coord: tuple = src_arr.grid.get_entry_coordinates(
-                        src_grid_entry
-                    )
-                    dst_block.oid = self.km.advanced_assign_block_along_axis(
-                        dst_block.oid,
-                        src_block.oid,
-                        ss,
-                        axis,
-                        dst_coord,
-                        src_coord,
-                        syskwargs={
-                            "grid_entry": dst_grid_entry,
-                            "grid_shape": dst_arr.grid.grid_shape,
-                        },
-                    )
         return dst_arr
 
     @staticmethod
@@ -625,7 +610,7 @@ class BlockArray(BlockArrayBase):
         elif array_utils.is_scalar(obj):
             return BlockArray.from_scalar(obj, km)
         else:
-            raise Exception("Unsupported type %s" % type(obj))
+            raise Exception(f"Unsupported type {type(obj)}")
         if block_shape is None:
             block_shape = km.get_block_shape(np_array.shape, np_array.dtype)
         return BlockArray.from_np(np_array, block_shape, False, km)
@@ -913,7 +898,7 @@ class BlockArray(BlockArrayBase):
         other = self.check_or_convert_other(other)
         if self.shape == other.shape and self.block_shape == other.block_shape:
             return self._fast_element_wise(op_name, other)
-        blocks_op = self.blocks.__getattribute__("__%s__" % op_name)
+        blocks_op = self.blocks.__getattribute__(f"__{op_name}__")
         return BlockArray.from_blocks(
             blocks_op(other.blocks), result_shape=None, km=self.km
         )
@@ -996,9 +981,10 @@ class BlockArray(BlockArrayBase):
 
     def __inequality__(self, op, other):
         other = self.check_or_convert_other(other)
-        assert (
-            other.shape == () or other.shape == self.shape
-        ), "Currently supports comparison with scalars only."
+        assert other.shape in [
+            (),
+            self.shape,
+        ], "Currently supports comparison with scalars only."
         shape = array_utils.broadcast(self.shape, other.shape).shape
         block_shape = array_utils.broadcast_block_shape(
             self.shape, other.shape, self.block_shape
@@ -1066,10 +1052,7 @@ class BlockArray(BlockArrayBase):
     # TODO (hme): Type check bool ops.
     def __bool__(self):
         # pylint: disable=no-member
-        if np.sum(self.shape) == len(self.shape):
-            # If all ones or scalar, then this is defined.
-            return self.get().__bool__()
-        return True
+        return self.get().__bool__() if np.sum(self.shape) == len(self.shape) else True
 
     def __invert__(self):
         return self.ufunc("invert")
@@ -1129,11 +1112,10 @@ class BlockArray(BlockArrayBase):
         return result
 
     def flattened_oids(self):
-        oids = []
-        for grid_entry in self.grid.get_entry_iterator():
-            oid = self.blocks[grid_entry].oid
-            oids.append(oid)
-        return oids
+        return [
+            self.blocks[grid_entry].oid
+            for grid_entry in self.grid.get_entry_iterator()
+        ]
 
 
 class Reshape:
@@ -1182,13 +1164,15 @@ class Reshape:
             (2**32, np.uint32),
             (2**64, np.uint64),
         ]
-        index_type = None
-        for bound, curr_index_type in index_types:
-            if np.all(np.array(src_grid.block_shape) < bound) and np.all(
-                dst_slice_np[1] < bound
-            ):
-                index_type = curr_index_type
-                break
+        index_type = next(
+            (
+                curr_index_type
+                for bound, curr_index_type in index_types
+                if np.all(np.array(src_grid.block_shape) < bound)
+                and np.all(dst_slice_np[1] < bound)
+            ),
+            None,
+        )
         if index_type is None:
             raise Exception("Unable to encode block indices, blocks are too large.")
         for grid_entry in src_grid.get_entry_iterator():
@@ -1205,7 +1189,7 @@ class Reshape:
                         (src_index - src_slice_np[0]).astype(index_type),
                     )
                     index_pairs.append(index_pair)
-            if len(index_pairs) > 0:
+            if index_pairs:
                 src_blocks[grid_entry] = index_pairs
         return src_blocks
 
@@ -1254,13 +1238,9 @@ class Reshape:
         return tuple(filter(lambda x: x != 1, shape))
 
     def _check_positions_ones(self, shape, block_shape):
-        # If a position in the shape is 1, then the corresponding
-        # position in block_shape should also be 1.
-        for i in range(len(shape)):
-            if shape[i] == 1:
-                if shape[i] != block_shape[i]:
-                    return False
-        return True
+        return not any(
+            shape[i] == 1 and shape[i] != block_shape[i] for i in range(len(shape))
+        )
 
     def _is_simple_reshape(self, arr: BlockArray, shape, block_shape):
         # Is the reshape a difference of factors of 1?
@@ -1275,14 +1255,12 @@ class Reshape:
 
         # Checks if source shape and dest shape are same & source block_shape and dest
         # block_shape are same after stripping ones.
-        if not (
-            self._strip_ones(shape) == self._strip_ones(arr.shape)
-            and self._strip_ones(block_shape) == self._strip_ones(arr.block_shape)
-        ):
-            return False
-        if not self._check_positions_ones(shape, block_shape):
-            return False
-        return True
+        return (
+            False
+            if self._strip_ones(shape) != self._strip_ones(arr.shape)
+            or self._strip_ones(block_shape) != self._strip_ones(arr.block_shape)
+            else bool(self._check_positions_ones(shape, block_shape))
+        )
 
     def _simple_reshape(self, arr, shape, block_shape):
         # Reshape the array of blocks only.
@@ -1318,9 +1296,9 @@ class Reshape:
             return arr
         elif self._is_simple_reshape(arr, shape, block_shape):
             return self._simple_reshape(arr, shape, block_shape)
-        elif arr.shape == shape and arr.block_shape != block_shape:
+        elif arr.shape == shape:
             return self._block_shape_reshape(arr, block_shape)
-        elif arr.shape != shape and arr.block_shape == block_shape:
+        elif arr.block_shape == block_shape:
             # Just do full reshape for this case as well.
             # Though there may be a better solution, we generally expect
             # the block shape to change with array shape.

@@ -128,14 +128,11 @@ def test_inv(app_inst: ArrayApplication):
 
 def test_inv_uppertri(app_inst: ArrayApplication):
     block_shape, shape = (3, 3), (20, 20)
-    R_matrices = []
-
     rs = np.random.RandomState(1337)
 
     # Create an upper-triangular matrix with sequential values.
     R_np = np.arange(1, shape[0] ** 2 + 1, 1).reshape(*shape).astype(float)
-    R_matrices.append(np.triu(R_np))
-
+    R_matrices = [np.triu(R_np)]
     # Create a random upper-triangular matrix
     _, R_np = np.linalg.qr(rs.rand(*shape))
     R_matrices.append(R_np)

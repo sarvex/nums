@@ -65,10 +65,7 @@ def indirect_tsr(app: ArrayApplication, X: BlockArray, reshape_output=True):
     R_oids = []
     # Assume no blocking along second dim.
     for i in range(grid_shape[0]):
-        # Select a row according to block_shape.
-        row = []
-        for j in range(grid_shape[1]):
-            row.append(X.blocks[i, j].oid)
+        row = [X.blocks[i, j].oid for j in range(grid_shape[1])]
         ge, gs = (i, 0), (grid_shape[0], 1)
         oid = app.km.qr(
             *row,
@@ -91,15 +88,11 @@ def indirect_tsr(app: ArrayApplication, X: BlockArray, reshape_output=True):
     )
     tsR.blocks[0, 0].oid = _qr_tree_reduce(app, R_oids, (0, 0), (1, 1))
 
-    # If blocking is "tall-skinny," then we're done.
-    if R_shape != R_block_shape:
-        if reshape_output:
-            R = tsR.reshape(R_shape, block_shape=R_block_shape)
-        else:
-            R = tsR
-    else:
-        R = tsR
-    return R
+    return (
+        tsR.reshape(R_shape, block_shape=R_block_shape)
+        if R_shape != R_block_shape and reshape_output
+        else tsR
+    )
 
 
 def indirect_tsqr(app: ArrayApplication, X: BlockArray, reshape_output=True):
@@ -114,10 +107,7 @@ def indirect_tsqr(app: ArrayApplication, X: BlockArray, reshape_output=True):
     # If blocking is "tall-skinny," then we're done.
     if R_shape != R_block_shape:
         R_inverse = tsR_inverse.reshape(R_shape, block_shape=R_block_shape)
-        if reshape_output:
-            R = tsR.reshape(R_shape, block_shape=R_block_shape)
-        else:
-            R = tsR
+        R = tsR.reshape(R_shape, block_shape=R_block_shape) if reshape_output else tsR
     else:
         R_inverse = tsR_inverse
         R = tsR
@@ -139,10 +129,7 @@ def direct_tsqr(app: ArrayApplication, X, reshape_output=True):
     QR_dims = []
     Q2_shape = [0, shape[1]]
     for i in range(grid_shape[0]):
-        # Select a row according to block_shape.
-        row = []
-        for j in range(grid_shape[1]):
-            row.append(X.blocks[i, j].oid)
+        row = [X.blocks[i, j].oid for j in range(grid_shape[1])]
         # We invoke "reduced", so q, r is returned with dimensions (M, K), (K, N), K = min(M, N)
         M = grid.get_block_shape((i, 0))[0]
         N = shape[1]
@@ -249,10 +236,7 @@ def inv(app: ArrayApplication, X: BlockArray):
     assert len(X.shape) == 2
     assert X.shape[0] == X.shape[1]
     single_block = X.shape[0] == X.block_shape[0] and X.shape[1] == X.block_shape[1]
-    if single_block:
-        result = X.copy()
-    else:
-        result = X.reshape(block_shape=X.shape)
+    result = X.copy() if single_block else X.reshape(block_shape=X.shape)
     result.blocks[0, 0].oid = app.km.inv(
         result.blocks[0, 0].oid, syskwargs={"grid_entry": (0, 0), "grid_shape": (1, 1)}
     )
@@ -391,24 +375,21 @@ def inv_uppertri(app: ArrayApplication, X: BlockArray):
                 )
             )
 
-        # Perform a second blocked matrix multiplication: R_01 = R_01 @ inv(R_11).
-        R01_2_oids = []
-        for row_block in range(R01_num_blocks):
-            R01_2_oids.append(
-                app.km.bop(
-                    "tensordot",
-                    R01_1_oids[row_block],
-                    R11_inv_oid,
-                    False,
-                    False,
-                    axes=1,
-                    syskwargs={
-                        "grid_entry": R01_grid_entries[row_block],
-                        "grid_shape": grid_shape,
-                    },
-                )
+        R01_2_oids = [
+            app.km.bop(
+                "tensordot",
+                R01_1_oids[row_block],
+                R11_inv_oid,
+                False,
+                False,
+                axes=1,
+                syskwargs={
+                    "grid_entry": R01_grid_entries[row_block],
+                    "grid_shape": grid_shape,
+                },
             )
-
+            for row_block in range(R01_num_blocks)
+        ]
         # Replace the entries in R with the new object IDs.
         for i, entry in enumerate(R01_grid_entries):
             R.blocks[entry].oid = R01_2_oids[i]
@@ -434,10 +415,7 @@ def cholesky(app: ArrayApplication, X: BlockArray):
     assert len(X.shape) == 2
     assert X.shape[0] == X.shape[1]
     single_block = X.shape[0] == X.block_shape[0] and X.shape[1] == X.block_shape[1]
-    if single_block:
-        result = X.copy()
-    else:
-        result = X.reshape(block_shape=X.shape)
+    result = X.copy() if single_block else X.reshape(block_shape=X.shape)
     result.blocks[0, 0].oid = app.km.cholesky(
         result.blocks[0, 0].oid, syskwargs={"grid_entry": (0, 0), "grid_shape": (1, 1)}
     )
@@ -457,8 +435,7 @@ def fast_linear_regression(app: ArrayApplication, X: BlockArray, y: BlockArray):
     R_inv = inv(app, R)
     if R_shape != R_block_shape:
         R_inv = R_inv.reshape(R_shape, block_shape=R_block_shape)
-    theta = R_inv @ (Q.transpose(defer=True) @ y)
-    return theta
+    return R_inv @ (Q.transpose(defer=True) @ y)
 
 
 def linear_regression(app: ArrayApplication, X: BlockArray, y: BlockArray):
@@ -473,8 +450,7 @@ def linear_regression(app: ArrayApplication, X: BlockArray, y: BlockArray):
     R_inv = inv(app, R)
     if R_shape != R_block_shape:
         R_inv = R_inv.reshape(R_shape, block_shape=R_block_shape)
-    theta = R_inv @ (Q.transpose(defer=True) @ y)
-    return theta
+    return R_inv @ (Q.transpose(defer=True) @ y)
 
 
 def ridge_regression(app: ArrayApplication, X: BlockArray, y: BlockArray, lamb: float):
@@ -487,9 +463,6 @@ def ridge_regression(app: ArrayApplication, X: BlockArray, y: BlockArray, lamb: 
     R_block_shape = (block_shape[1], block_shape[1])
     R = indirect_tsr(app, X)
     lamb_vec = app.array(lamb * np.eye(R_shape[0]), block_shape=R_block_shape)
-    # TODO (hme): A better solution exists, which inverts R by augmenting X and y.
-    #  See Murphy 7.5.2.
-    theta = inv(app, lamb_vec + R.transpose(defer=True) @ R) @ (
+    return inv(app, lamb_vec + R.transpose(defer=True) @ R) @ (
         X.transpose(defer=True) @ y
     )
-    return theta

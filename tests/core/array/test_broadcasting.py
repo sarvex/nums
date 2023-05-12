@@ -40,10 +40,7 @@ def test_assign_broadcasting():
     # is without loss of generality.
     def get_array(shape):
         shape = tuple(filter(lambda x: x > 0, shape))
-        if len(shape) == 0:
-            return np.array(0)
-        else:
-            return np.empty(np.product(shape)).reshape(shape)
+        return np.array(0) if not shape else np.empty(np.product(shape)).reshape(shape)
 
     perms = list(itertools.product([0, 1, 2, 3], repeat=10))
     pbar = tqdm.tqdm(total=len(perms))
@@ -53,17 +50,14 @@ def test_assign_broadcasting():
         try:
             if A.shape == ():
                 continue
-            if B.shape == ():
-                A[:] = B
-            else:
-                A[:] = B[:]
+            A[:] = B if B.shape == () else B[:]
             # This should execute without error.
             assert np.broadcast_to(
                 B, A.shape
             ).shape == array_utils.broadcast_shape_to_alt(B.shape, A.shape)
             assert array_utils.can_broadcast_shape_to(
                 B.shape, A.shape
-            ), "%s can be broadcast to %s" % (B.shape, A.shape)
+            ), f"{B.shape} can be broadcast to {A.shape}"
         except ValueError as _:
             with pytest.raises(ValueError):
                 np.broadcast_to(B, A.shape)
@@ -71,17 +65,14 @@ def test_assign_broadcasting():
                 array_utils.broadcast_shape_to_alt(B.shape, A.shape)
             assert not array_utils.can_broadcast_shape_to(
                 B.shape, A.shape
-            ), "%s cannot be broadcast to %s" % (B.shape, A.shape)
+            ), f"{B.shape} cannot be broadcast to {A.shape}"
         pbar.update(1)
 
 
 def test_bop_broadcasting():
     def get_array(shape):
         shape = tuple(filter(lambda x: x > 0, shape))
-        if len(shape) == 0:
-            return np.array(0)
-        else:
-            return np.empty(np.product(shape)).reshape(shape)
+        return np.array(0) if not shape else np.empty(np.product(shape)).reshape(shape)
 
     perms = list(itertools.product([0, 1, 2, 3], repeat=10))
     pbar = tqdm.tqdm(total=len(perms))
